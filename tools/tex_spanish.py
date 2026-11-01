@@ -352,6 +352,18 @@ def stripe(name):
     save(name, col)
 
 
+def limewash(name):
+    """Hand-trowelled lime stucco: soft warm-white clouds, trowel sweeps and a bumpy normal map."""
+    n = 1024
+    cloud = fbm(n, 2.6, 901)
+    sweep = fbm(n, 2.2, 902, aniso=(3.0, 1.0))
+    grit = fbm(n, 0.9, 903)
+    val = 0.95 + 0.05 * (cloud - 0.5) * 2 + 0.025 * (sweep - 0.5) * 2 + 0.02 * (grit - 0.5) * 2
+    col = np.dstack([val, val * 0.985, val * 0.95])
+    save(name, col)
+    save_normal(name, sweep * 0.5 + grit * 0.35 + cloud * 0.4, 3.0, 512)
+
+
 # ---------------------------------------------------------------- ground
 def cobble(name):
     """Andalusian pebble paving (empedrado): pebbles set on edge, bands of dark and light stones."""
@@ -571,6 +583,7 @@ JOBS = {
     "s_azulejo2": lambda: azulejo("s_azulejo2", 1),
     "s_azulejo_border": lambda: azulejo_border("s_azulejo_border"),
     "s_terracotta": lambda: terracotta("s_terracotta"),
+    "s_stucco": lambda: limewash("s_stucco"),
     "s_roof_barrel": lambda: roof_barrel("s_roof_barrel"),
     "s_beam": lambda: beam("s_beam"),
     "s_door_planks": lambda: door_planks("s_door_planks"),

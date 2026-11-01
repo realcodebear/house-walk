@@ -1262,6 +1262,9 @@ def bake_lightmaps(out_dir, res=2048, samples=128, lamp_watts=55.0):
     sc.cycles.samples = samples
     sc.cycles.use_denoising = False
     sc.render.bake.margin = 6
+    sc.render.bake.use_pass_direct = True           # light only: textures are applied in the game
+    sc.render.bake.use_pass_indirect = True
+    sc.render.bake.use_pass_color = False
     for i, L in enumerate(LIGHTS):
         ld = bpy.data.lights.new(f"bake lamp {i}", "POINT")
         ld.energy = lamp_watts * L["power"]
