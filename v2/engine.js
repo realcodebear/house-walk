@@ -21,7 +21,7 @@ const BASE = (window.HOUSE && window.HOUSE.base) || './';
 const VER = window.HOUSE && window.HOUSE.v ? '?v=' + window.HOUSE.v : '';   // new deploy -> new URLs -> no stale cache
 const params = new URLSearchParams(location.search);
 const TOUCH = matchMedia('(pointer: coarse)').matches || params.has('touch');   // ?touch forces phone controls
-const P = { radius: 0.22, height: 1.75, eye: 1.62, step: 0.3, walk: 1.4, run: 3.8, accel: 11, airAccel: 2.5, jump: 4.0, gravity: 14 };
+const P = { radius: 0.21, height: 1.68, eye: 1.55, step: 0.3, walk: 1.4, run: 3.8, accel: 11, airAccel: 2.5, jump: 4.0, gravity: 14 };
 const SUBSTEPS = 4;
 const REACH = 2.8;
 const QUALITY = TOUCH ? { pr: 1.5, shadow: 1024, lights: 5, post: false } : { pr: 2, shadow: 2048, lights: 10, post: !params.has('lite') };
@@ -244,15 +244,35 @@ for (let i = 0; i < Math.min(QUALITY.lights, spots.length); i++) {
   scene.add(l);
   roomLights.push(l);
 }
-function placeLights() {
+// Each pooled light stays on its spot while that spot is still among the nearest; a light that must move fades
+// out, jumps, and fades back in. (Re-sorting every update made lights hop between rooms = flicker.)
+const lightSpot = roomLights.map(() => null), lightNext = roomLights.map(() => null), lightLevel = roomLights.map(() => 0);
+function placeLights(instant = false) {
   const lv = levelOf(player.pos.y);
   const near = spots.filter((s) => s.level === lv).sort((a, b) => a.pos.distanceToSquared(player.pos) - b.pos.distanceToSquared(player.pos));
+  const keep = new Set(near.slice(0, roomLights.length + 2));          // a little slack so lights don't hop at borders
+  const want = near.slice(0, roomLights.length);
+  const taken = new Set(lightSpot.filter((s) => s && keep.has(s)));
+  const missing = want.filter((s) => !taken.has(s));
   roomLights.forEach((l, i) => {
-    const s = near[i];
-    if (!s) { l.intensity = 0; return; }
-    l.position.copy(s.pos);
-    l.color.copy(s.color);
-    l.intensity = lightsOn ? interior.intensity * s.power : 0;
+    if (lightSpot[i] && keep.has(lightSpot[i])) { lightNext[i] = null; return; }
+    lightNext[i] = missing.shift() || null;
+    if (instant || !lightSpot[i]) { lightSpot[i] = lightNext[i]; lightNext[i] = null; lightLevel[i] = 0; }
+  });
+  roomLights.forEach((l, i) => { const s = lightSpot[i]; if (s) { l.position.copy(s.pos); l.color.copy(s.color); } });
+}
+function fadeLights(dt) {
+  const k = Math.min(1, dt * 3);                                         // ~0.3 s fades
+  roomLights.forEach((l, i) => {
+    const s = lightSpot[i];
+    const leaving = lightNext[i] !== null || !s;
+    const target = !lightsOn || leaving ? 0 : 1;
+    lightLevel[i] += (target - lightLevel[i]) * k;
+    if (leaving && lightLevel[i] < 0.02) {                               // faded out: jump to the new spot
+      lightSpot[i] = lightNext[i]; lightNext[i] = null;
+      if (lightSpot[i]) { l.position.copy(lightSpot[i].pos); l.color.copy(lightSpot[i].color); }
+    }
+    l.intensity = s ? interior.intensity * s.power * lightLevel[i] : 0;
   });
 }
 
@@ -263,14 +283,14 @@ sun.position.copy(centre).add(new THREE.Vector3(...off));
 sun.target.position.copy(centre);
 sun.target.updateMatrixWorld();
 renderer.shadowMap.needsUpdate = true;
-if (QUALITY.post) { buildComposer(); postOn = true; }
+if (QUALITY.post && !baked && params.has('fx')) { buildComposer(); postOn = true; }
 
 $('loading').remove();
 overlay.hidden = false;
 spawn(0);
 loadJack('../../assets/', VER).then((j) => {
   jack = j;
-  jack.root.scale.setScalar(0.96);                   // 1.76 m: Jack's model is a tall 1.83 m
+  jack.root.scale.setScalar(0.912);                  // 1.67 m (95 % of the earlier 1.76 m)
   scene.add(j.root);
   if (!viewChosen) view = 'third';
 }).catch((e) => console.warn('Jack did not load:', e));
@@ -283,7 +303,7 @@ function spawn(i) {
   player.vel.set(0, 0, 0); player.vy = 0; player.yaw = s.yaw || 0; player.pitch = 0;
   player.eyeY = player.pos.y + P.eye;
   player.onGround = true;
-  placeLights();
+  placeLights(true);
 }
 
 function levelOf(y) {
@@ -679,6 +699,46 @@ function drawMap(lv) {
   c.fillText(data.levels[lv].label.toUpperCase(), pad, 13);
 }
 
+// ------------------------------------------------------------------ tutorial (first visit; remembered per browser)
+const tipEl = $('tip');
+const TIPS = TOUCH ? [
+  ['move', 'Drag your <b>left thumb</b> to walk'],
+  ['look', 'Drag your <b>right thumb</b> to look around'],
+  ['door', 'Walk up to the front door and <b>tap it</b> (or press <b>Open</b>)'],
+  ['floor', 'Tap <b>Floor ▸</b> to jump between the garden and each floor · <b>Map</b> shows where you are'],
+] : [
+  ['move', 'Walk with <b>W A S D</b> (or the arrow keys)'],
+  ['look', 'Move the <b>mouse</b> to look around'],
+  ['door', 'Walk up to the front door and press <b>E</b> (or click it) to open it'],
+  ['run', 'Hold <b>Shift</b> to run · <b>Space</b> jumps'],
+  ['floor', 'Keys <b>1–4</b> jump between the garden and each floor · <b>V</b> first person · <b>M</b> map'],
+];
+let tipIdx = 0, tipT = 0, tipDone = false, walked = 0, turned = 0, lastYaw = 0;
+try { tipDone = localStorage.getItem('housewalk-tutorial') === 'done'; } catch (e) { /* storage optional */ }
+function tipDoneNow() {
+  const id = TIPS[tipIdx]?.[0];
+  if (id === 'move') return walked > 2.5;
+  if (id === 'look') return turned > 1.2;
+  if (id === 'door') return doors.some((d) => Math.abs(d.target - d.closed) > 1e-3);
+  if (id === 'run') return keys.has('ShiftLeft') || keys.has('ShiftRight') || runToggle;
+  return tipT > 9;
+}
+function tutorial(dt) {
+  if (!tipEl) return;
+  if (tipDone || !playing) { tipEl.classList.remove('on'); return; }
+  walked += Math.hypot(player.vel.x, player.vel.z) * dt;
+  turned += Math.abs(player.yaw - lastYaw); lastYaw = player.yaw;
+  tipT += dt;
+  if (tipT > 0.8 && tipDoneNow()) {
+    tipIdx++; tipT = 0;
+    if (tipIdx >= TIPS.length) { tipDone = true; try { localStorage.setItem('housewalk-tutorial', 'done'); } catch (e) { /* ignore */ } return; }
+  }
+  const html = `<span>${tipIdx + 1}/${TIPS.length}</span> ${TIPS[tipIdx][1]}`;
+  if (tipEl.dataset.i !== String(tipIdx)) { tipEl.innerHTML = html; tipEl.dataset.i = String(tipIdx); }
+  tipEl.classList.add('on');
+}
+addEventListener('keydown', (e) => { if (e.code === 'KeyH' && playing) { tipDone = !tipDone; if (!tipDone) { tipIdx = 0; tipT = 0; } } });
+
 // ------------------------------------------------------------------ loop (+ automatic quality)
 const clock = new THREE.Clock();
 let hudTimer = 0, lightTimer = 0, frames = 0, fpsAcc = 0, goodFor = 0, fps = 60;
@@ -700,6 +760,8 @@ renderer.setAnimationLoop(() => {
   adaptQuality(dt);
   if ((hudTimer += dt) > 0.1) { hudTimer = 0; drawHud(); }
   if ((lightTimer += dt) > 0.4) { lightTimer = 0; placeLights(); }
+  fadeLights(dt);
+  tutorial(dt);
   if (postOn && composer) composer.render(); else renderer.render(scene, camera);
 });
 
