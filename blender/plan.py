@@ -72,7 +72,7 @@ def gf_walls(cfg):
         "GF wall hamam-bed":    ((17.5, 18.2, 27.4, 37.5), [], None),
         "GF wall kitchen-hamam": ((7.8, 8.5, 27.4, 37.5), [A(27.4, 31.9, arch=arch)], None),
         "GF wall kitchen E":    ((8.6, 9.4, 21.6, 26.7), [D(21.9, 24.7, 'a', (-1, 0))], None),
-        "GF wall store-kitchen": ((0.75, 7.8, 32.2, 32.6), [A(6.0, 7.8, arch=False)], None),
+        "GF wall store-kitchen": ((0.75, 7.8, 32.2, 32.6), [A(5.4, 7.8, arch=False)], None),
     }
 
 
