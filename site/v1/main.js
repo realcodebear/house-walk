@@ -366,7 +366,7 @@ function resetTouch() { joy.id = look.id = null; joy.x = joy.y = 0; joyBase.styl
 touchEl.addEventListener('pointerdown', (e) => {
   if (e.target !== touchEl) return;                    // buttons handle their own presses
   e.preventDefault();
-  touchEl.setPointerCapture?.(e.pointerId);
+  try { touchEl.setPointerCapture(e.pointerId); } catch (err) { /* synthetic or already-ended pointer */ }
   if (e.clientX < innerWidth * 0.45 && joy.id === null) {
     joy.id = e.pointerId; joy.x0 = e.clientX; joy.y0 = e.clientY; joy.x = joy.y = 0;
     Object.assign(joyBase.style, { left: e.clientX + 'px', top: e.clientY + 'px', display: 'block' });
