@@ -2,7 +2,7 @@
 
     python3 tools/make_pages.py
 """
-import html, json, os
+import hashlib, html, json, os, time
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -17,6 +17,14 @@ DESIGNS = [
 ]
 
 
+def build_id(*paths):
+    h = hashlib.md5()
+    for p in paths:
+        if os.path.exists(p):
+            h.update(open(p, "rb").read())
+    return h.hexdigest()[:10]
+
+
 def design_pages():
     tpl = open(os.path.join(SITE, "v2", "_template.html")).read()
     built = []
@@ -26,24 +34,28 @@ def design_pages():
             continue
         data = json.load(open(os.path.join(d, "house.json")))
         attic = " / attic" if "AT" in data["levels"] else ""
+        ver = build_id(os.path.join(d, "house.glb"), os.path.join(d, "house.json"), os.path.join(SITE, "v2", "engine.js"),
+                       os.path.join(SITE, "assets", "jack.js"), *[os.path.join(d, f) for f in sorted(os.listdir(d)) if f.startswith("lm_")])
         page = (tpl.replace("{{TITLE}}", html.escape(title)).replace("{{BLURB}}", html.escape(blurb))
-                .replace("{{ATTIC_KEY}}", attic))
+                .replace("{{ATTIC_KEY}}", attic)
+                .replace('window.HOUSE = { base: "./" };', f'window.HOUSE = {{ base: "./", v: "{ver}" }};')
+                .replace('src="../engine.js"', f'src="../engine.js?v={ver}"'))
         open(os.path.join(d, "index.html"), "w").write(page)
         src = os.path.join(ROOT, "renders", "v2", f"{key}_1_front.png")
         if os.path.exists(src):
             im = Image.open(src).convert("RGB")
             im.thumbnail((800, 500))
             im.save(os.path.join(d, "thumb.jpg"), quality=82)
-        built.append((key, title, blurb))
+        built.append((key, title, blurb, ver))
     return built
 
 
 def picker(built):
     cards = []
-    for key, title, blurb in built:
+    for key, title, blurb, ver in built:
         cards.append(f"""
-    <a class="card" href="v2/{key}/index.html">
-      <img src="v2/{key}/thumb.jpg" alt="{html.escape(title)} house, front view" loading="lazy">
+    <a class="card" href="v2/{key}/index.html?v={ver}">
+      <img src="v2/{key}/thumb.jpg?v={ver}" alt="{html.escape(title)} house, front view" loading="lazy">
       <div class="txt"><h2>{html.escape(title)}</h2><p>{html.escape(blurb)}</p><span class="play">Walk in ▸</span></div>
     </a>""")
     page = f"""<!doctype html>
@@ -93,4 +105,4 @@ def picker(built):
 if __name__ == "__main__":
     b = design_pages()
     picker(b)
-    print("pages:", [k for k, _, _ in b])
+    print("pages:", [(k, v) for k, _, _, v in b])

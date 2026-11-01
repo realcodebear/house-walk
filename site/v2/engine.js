@@ -18,6 +18,7 @@ import { loadJack } from '../assets/jack.js';
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
 const BASE = (window.HOUSE && window.HOUSE.base) || './';
+const VER = window.HOUSE && window.HOUSE.v ? '?v=' + window.HOUSE.v : '';   // new deploy -> new URLs -> no stale cache
 const params = new URLSearchParams(location.search);
 const TOUCH = matchMedia('(pointer: coarse)').matches || params.has('touch');   // ?touch forces phone controls
 const P = { radius: 0.22, height: 1.75, eye: 1.62, step: 0.3, walk: 1.4, run: 3.8, accel: 11, airAccel: 2.5, jump: 4.0, gravity: 14 };
@@ -99,8 +100,8 @@ const toPlan = (v) => ({ x: v.x / FT, y: -v.z / FT });
 const draco = new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/gltf/');
 const gltfLoader = new GLTFLoader().setDRACOLoader(draco);
 const [json, gltf] = await Promise.all([
-  fetch(BASE + 'house.json').then((r) => r.json()),
-  gltfLoader.loadAsync(BASE + 'house.glb', (e) => {
+  fetch(BASE + 'house.json' + VER).then((r) => r.json()),
+  gltfLoader.loadAsync(BASE + 'house.glb' + VER, (e) => {
     if (e.total) $('loading').textContent = `Loading house… ${Math.round((e.loaded / e.total) * 100)}%`;
   }),
 ]);
@@ -162,7 +163,7 @@ function toBaked(src, tex, scale) {
   return m;
 }
 await Promise.all(lmRoots.map(async ([root, info]) => {
-  const tex = await texLoader.loadAsync(BASE + info.file);
+  const tex = await texLoader.loadAsync(BASE + info.file + VER);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.flipY = false;
   tex.channel = 1;
@@ -267,7 +268,7 @@ if (QUALITY.post) { buildComposer(); postOn = true; }
 $('loading').remove();
 overlay.hidden = false;
 spawn(0);
-loadJack('../../assets/').then((j) => {
+loadJack('../../assets/', VER).then((j) => {
   jack = j;
   jack.root.scale.setScalar(0.96);                   // 1.76 m: Jack's model is a tall 1.83 m
   scene.add(j.root);
