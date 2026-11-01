@@ -1060,15 +1060,15 @@
  "lightmaps": {
   "LM_GF": {
    "file": "lm_GF.jpg",
-   "scale": 3.6315307493251674
+   "scale": 3.5930232348545115
   },
   "LM_SF": {
    "file": "lm_SF.jpg",
-   "scale": 3.632695475385582
+   "scale": 3.645344597117868
   },
   "LM_EXT": {
    "file": "lm_EXT.jpg",
-   "scale": 3.350989949317399
+   "scale": 3.343664437153695
   }
  }
 }
