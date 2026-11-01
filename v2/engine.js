@@ -4,6 +4,7 @@
 // Desktop: pointer-lock mouse look + WASD.  Phones: landscape, left-thumb joystick, right-thumb look, tap doors.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -58,13 +59,16 @@ scene.add(hemi, sun, sun.target);
 
 // post-processing (desktop): ambient occlusion in corners + a soft glow on lamps and cove LEDs
 let composer = null, postOn = false;
+let baked = false;
 function buildComposer() {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const ao = new GTAOPass(scene, camera, innerWidth, innerHeight);
-  ao.updateGtaoMaterial({ radius: 0.45, distanceExponent: 1.4, thickness: 1.0, scale: 1.0, samples: 12 });
-  ao.blendIntensity = 0.85;
-  composer.addPass(ao);
+  if (!baked) {
+    const ao = new GTAOPass(scene, camera, innerWidth, innerHeight);
+    ao.updateGtaoMaterial({ radius: 0.45, distanceExponent: 1.4, thickness: 1.0, scale: 1.0, samples: 12 });
+    ao.blendIntensity = 0.85;
+    composer.addPass(ao);
+  }
   composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.2, 0.4, 0.96));
   composer.addPass(new OutputPass());
   composer.setPixelRatio(pixelRatio);
@@ -92,9 +96,11 @@ const toWorld = (xft, yft, zft = 0) => new THREE.Vector3(xft * FT, zft * FT, -yf
 const toPlan = (v) => ({ x: v.x / FT, y: -v.z / FT });
 
 // ------------------------------------------------------------------ load
+const draco = new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/gltf/');
+const gltfLoader = new GLTFLoader().setDRACOLoader(draco);
 const [json, gltf] = await Promise.all([
   fetch(BASE + 'house.json').then((r) => r.json()),
-  new GLTFLoader().loadAsync(BASE + 'house.glb', (e) => {
+  gltfLoader.loadAsync(BASE + 'house.glb', (e) => {
     if (e.total) $('loading').textContent = `Loading house… ${Math.round((e.loaded / e.total) * 100)}%`;
   }),
 ]);
@@ -130,6 +136,46 @@ house.traverse((o) => {
 });
 house.updateMatrixWorld(true);
 
+// baked lighting: LM_* objects carry a second UV set; draw them unlit with their lightmap
+const lmInfo = data.lightmaps || {};
+const lmRoots = [];
+house.traverse((o) => { if (lmInfo[o.name]) lmRoots.push([o, lmInfo[o.name]]); });
+baked = lmRoots.length > 0;
+const texLoader = new THREE.TextureLoader();
+const bakedMats = new Map();
+function toBaked(src, tex, scale) {
+  const key = src.uuid + '|' + tex.uuid;
+  if (bakedMats.has(key)) return bakedMats.get(key);
+  const m = new THREE.MeshBasicMaterial({
+    name: src.name, map: src.map || null, color: src.color ? src.color.clone() : new THREE.Color(1, 1, 1),
+    lightMap: tex, lightMapIntensity: scale * Math.PI * (look.lm_exposure ?? 1.0),
+    transparent: src.transparent, opacity: src.opacity, alphaTest: src.alphaTest, side: src.side,
+  });
+  if (src.userData?.tint && src.map) m.color.setRGB(...src.userData.tint);
+  if ((src.roughness ?? 1) < 0.32 && !src.transparent) {      // polished marble / ceramic keeps a faint reflection
+    m.envMap = scene.environment;
+    m.combine = THREE.MixOperation;
+    m.reflectivity = 0.1;
+  }
+  if (m.transparent) m.depthWrite = false;
+  bakedMats.set(key, m);
+  return m;
+}
+await Promise.all(lmRoots.map(async ([root, info]) => {
+  const tex = await texLoader.loadAsync(BASE + info.file);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = false;
+  tex.channel = 1;
+  tex.anisotropy = 4;
+  root.traverse((m) => {
+    if (!m.isMesh) return;
+    m.userData.lm = true;
+    m.material = toBaked(m.material, tex, info.scale);
+    m.castShadow = true;
+    m.receiveShadow = false;
+  });
+}));
+
 // materials: tint textures (glTF has no multiply node), lattice = cut-out, glass = no depth write
 const fixedMats = new Set();
 function fixMaterial(m) {
@@ -145,6 +191,14 @@ function fixMaterial(m) {
 const byMat = new Map(), collGeoms = [], statics = [];
 house.traverse((o) => { if (o.isMesh && !o.userData.door && !o.userData.dynamic) statics.push(o); });
 for (const o of statics) {
+  if (o.userData.lm) {                              // keep in the scene; add its triangles to the collider
+    const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+    if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
+    if (!/glass|water|lattice|curtain|leaves|lampshade|led|downlight/i.test(o.material.name) || /glass/i.test(o.material.name)) {
+      collGeoms.push(new THREE.BufferGeometry().setAttribute('position', g.attributes.position).setIndex(g.index).toNonIndexed());
+    }
+    continue;
+  }
   fixMaterial(o.material);
   const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
   if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
