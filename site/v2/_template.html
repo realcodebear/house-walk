@@ -8,7 +8,10 @@
 <style>
   :root { --ink: #f4efe6; --dim: rgba(20, 18, 16, 0.66); --accent: #e8b25c; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d22; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); overscroll-behavior: none; }
-  canvas#view { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  #app { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; overflow: hidden; }
+  /* phone held upright: turn the whole game sideways so it is always landscape */
+  body.touch.rot #app { width: 100vh; height: 100vw; left: 100vw; transform: rotate(90deg); transform-origin: 0 0; }
+  canvas#view { display: block; width: 100%; height: 100%; touch-action: none; }
   #overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(12, 14, 18, 0.55); backdrop-filter: blur(3px); cursor: pointer; padding: 16px; }
   #overlay[hidden] { display: none; }
   #overlay .card { background: var(--dim); padding: 26px 30px; border-radius: 14px; max-width: 460px; box-shadow: 0 10px 40px rgba(0,0,0,.35); }
@@ -68,6 +71,7 @@
 </script>
 </head>
 <body>
+<div id="app">
 <canvas id="view"></canvas>
 <div id="cross"></div>
 <div id="hud">Loading…</div>
@@ -84,6 +88,7 @@
     <button class="pill" id="bMap">Map</button>
     <button class="pill" id="bLights">Lights</button>
     <button class="pill" id="bView">View</button>
+    <button class="pill" id="bSound">Sound</button>
     <button class="pill" id="bMenu">☰</button>
   </div>
   <button class="tb" id="bUse">Open</button>
@@ -102,7 +107,7 @@
       <tr><td><kbd>Space</kbd></td><td>jump</td></tr>
       <tr><td><kbd>E</kbd> or click</td><td>open / close the door you look at</td></tr>
       <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></td><td>outside / ground floor / second floor{{ATTIC_KEY}}</td></tr>
-      <tr><td><kbd>Q</kbd></td><td>soft shadows + glow on / off</td></tr>
+      <tr><td><kbd>Q</kbd> · <kbd>N</kbd> · <kbd>H</kbd></td><td>glow effects · sound on/off · show tutorial again</td></tr>
       <tr><td><kbd>M</kbd> · <kbd>L</kbd></td><td>map · room lights</td></tr>
       <tr><td><kbd>V</kbd> · wheel</td><td>first / third person · camera distance</td></tr>
     </table>
@@ -117,7 +122,7 @@
     <p class="back"><a href="../../index.html">← all designs</a></p>
   </div>
 </div>
-<div id="rotate"><div><div class="ph"></div>Turn your phone sideways to play</div></div>
+</div>
 <div id="loading">Loading {{TITLE}}…</div>
 <script>window.HOUSE = { base: "./" };</script>
 <script type="module" src="../engine.js"></script>

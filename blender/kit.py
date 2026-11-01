@@ -603,8 +603,8 @@ def false_ceiling(name, rect, ceil, drop=0.75, border=1.6, m=None, cove=True, do
     lip = 0.35
     for nm, r in (("S", (x0 + border, x1 - border, y0 + border, y0 + border + 0.08)),
                   ("N", (x0 + border, x1 - border, y1 - border - 0.08, y1 - border)),
-                  ("W", (x0 + border, x0 + border + 0.08, y0 + border, y1 - border)),
-                  ("E", (x1 - border - 0.08, x1 - border, y0 + border, y1 - border))):
+                  ("W", (x0 + border, x0 + border + 0.08, y0 + border + 0.08, y1 - border - 0.08)),
+                  ("E", (x1 - border - 0.08, x1 - border, y0 + border + 0.08, y1 - border - 0.08))):
         box(f"{name} lip {nm}", *r, zb + th, zb + th + lip, m, "Ceilings")
     if cove:
         led = STYLE["led"]
@@ -648,16 +648,19 @@ def wainscot(name, rect, z0, h, m, gaps=None, t=0.05, faces="SNWE"):
         for a, b in runs(x0, x1, gaps.get("S", [])): box(f"{name} S", a, b, y0, y0 + t, z0, z0 + h, m, "Walls")
     if "N" in faces:
         for a, b in runs(x0, x1, gaps.get("N", [])): box(f"{name} N", a, b, y1 - t, y1, z0, z0 + h, m, "Walls")
+    ys0 = y0 + t if "S" in faces else y0                 # don't overlap the S/N pieces in the corners
+    ys1 = y1 - t if "N" in faces else y1
     if "W" in faces:
-        for a, b in runs(y0, y1, gaps.get("W", [])): box(f"{name} W", x0, x0 + t, a, b, z0, z0 + h, m, "Walls")
+        for a, b in runs(ys0, ys1, gaps.get("W", [])): box(f"{name} W", x0, x0 + t, a, b, z0, z0 + h, m, "Walls")
     if "E" in faces:
-        for a, b in runs(y0, y1, gaps.get("E", [])): box(f"{name} E", x1 - t, x1, a, b, z0, z0 + h, m, "Walls")
+        for a, b in runs(ys0, ys1, gaps.get("E", [])): box(f"{name} E", x1 - t, x1, a, b, z0, z0 + h, m, "Walls")
 
 
 def cornice(name, rect, ceil, m=None, d=0.22, hgt=0.3):
     m = m or STYLE.get("trim", STYLE["wall"])
     x0, x1, y0, y1 = rect
-    for nm, r in (("S", (x0, x1, y0, y0 + d)), ("N", (x0, x1, y1 - d, y1)), ("W", (x0, x0 + d, y0, y1)), ("E", (x1 - d, x1, y0, y1))):
+    # side pieces stop where the end pieces start: overlapping corners share faces and flicker
+    for nm, r in (("S", (x0, x1, y0, y0 + d)), ("N", (x0, x1, y1 - d, y1)), ("W", (x0, x0 + d, y0 + d, y1 - d)), ("E", (x1 - d, x1, y0 + d, y1 - d))):
         box(f"{name} cornice {nm}", *r, ceil - hgt, ceil, m, "Ceilings")
 
 

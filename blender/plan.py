@@ -114,7 +114,7 @@ def stairs_gf(rail_kind="glass"):
     m = STYLE["stair"]
     steps1 = [(11.7 - i * T1, 11.7 - (i - 1) * T1, 18.0, 20.9, i * R) for i in range(1, 7)]
     stair_flight("Stair A", steps1, m, R, floor_z=0.0)
-    cyl("Stair bullnose", 11.2, 18.0, 0.0, R, 0.9, m, "Stairs", seg=24)
+    cyl("Stair bullnose", 11.2, 18.0, 0.0, R - 0.03, 0.9, m, "Stairs", seg=24)   # just under step 1: no shared top face
     box("Stair landing", 2.5, 6.0, 17.0, 20.9, 0.0, 7 * R, m, "Stairs")
     steps2 = [(2.5, 6.0, 17.0 - k * T2, 17.0 - (k - 1) * T2, (7 + k) * R) for k in range(1, 10)]
     stair_flight("Stair B", steps2, m, R)

@@ -24,7 +24,11 @@ const TOUCH = matchMedia('(pointer: coarse)').matches || params.has('touch');   
 const P = { radius: 0.21, height: 1.68, eye: 1.55, step: 0.3, walk: 1.4, run: 3.8, accel: 11, airAccel: 2.5, jump: 4.0, gravity: 14 };
 const SUBSTEPS = 4;
 const REACH = 2.8;
-const QUALITY = TOUCH ? { pr: 1.5, shadow: 1024, lights: 5, post: false } : { pr: 2, shadow: 2048, lights: 10, post: !params.has('lite') };
+// phones held upright: the app is turned 90° (CSS) so the game is always landscape
+const ROT = () => TOUCH && innerHeight > innerWidth;
+const VW = () => (ROT() ? innerHeight : innerWidth), VH = () => (ROT() ? innerWidth : innerHeight);
+function local(e) { return ROT() ? { x: e.clientY, y: innerWidth - e.clientX } : { x: e.clientX, y: e.clientY }; }
+const QUALITY = TOUCH ? { pr: 2, shadow: 2048, lights: 6, post: false } : { pr: 2, shadow: 2048, lights: 10, post: !params.has('lite') };
 
 // ------------------------------------------------------------------ renderer / scene
 const $ = (id) => document.getElementById(id);
@@ -32,18 +36,19 @@ const canvas = $('view');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 const maxPr = Math.min(devicePixelRatio, QUALITY.pr);
 let pixelRatio = QUALITY.post ? Math.min(maxPr, 1.5) : maxPr;
+const minPr = Math.min(maxPr, TOUCH ? 1.5 : 1.25);    // floor for automatic quality: stays crisp
 renderer.setPixelRatio(pixelRatio);
-renderer.setSize(innerWidth, innerHeight);
+renderer.setSize(VW(), VH());
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false;              // static scene: redraw shadows only when a door moves
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 500);
+const camera = new THREE.PerspectiveCamera(70, VW() / VH(), 0.05, 500);
 camera.rotation.order = 'YXZ';
 function fitFov() {                                  // keep the view at least ~80° wide on narrow screens
-  const a = innerWidth / innerHeight, minH = THREE.MathUtils.degToRad(80);
+  const a = VW() / VH(), minH = THREE.MathUtils.degToRad(80);
   camera.fov = Math.min(95, Math.max(68, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(minH / 2) / a))));
   camera.aspect = a;
   camera.updateProjectionMatrix();
@@ -65,21 +70,22 @@ function buildComposer() {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   if (!baked) {
-    const ao = new GTAOPass(scene, camera, innerWidth, innerHeight);
+    const ao = new GTAOPass(scene, camera, VW(), VH());
     ao.updateGtaoMaterial({ radius: 0.45, distanceExponent: 1.4, thickness: 1.0, scale: 1.0, samples: 12 });
     ao.blendIntensity = 0.85;
     composer.addPass(ao);
   }
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.2, 0.4, 0.96));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(VW(), VH()), 0.2, 0.4, 0.96));
   composer.addPass(new OutputPass());
   composer.setPixelRatio(pixelRatio);
-  composer.setSize(innerWidth, innerHeight);
+  composer.setSize(VW(), VH());
 }
 
 // ------------------------------------------------------------------ UI refs
 const hud = $('hud'), promptEl = $('prompt'), overlay = $('overlay'), mapCanvas = $('map');
 const mapCtx = mapCanvas.getContext('2d');
 if (TOUCH) document.body.classList.add('touch');
+document.body.classList.toggle('rot', ROT());
 
 // ------------------------------------------------------------------ state
 const player = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), vy: 0, yaw: 0, pitch: 0, eyeY: 0, onGround: true, bob: 0 };
@@ -167,7 +173,7 @@ await Promise.all(lmRoots.map(async ([root, info]) => {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.flipY = false;
   tex.channel = 1;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
   root.traverse((m) => {
     if (!m.isMesh) return;
     m.userData.lm = true;
@@ -188,6 +194,9 @@ function fixMaterial(m) {
   if (m.emissiveIntensity > 1 && TOUCH) m.emissiveIntensity *= 0.8;
 }
 
+// sharp textures on floors seen at a low angle
+const ANISO = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+house.traverse((o) => { if (o.isMesh) for (const k of ['map', 'normalMap', 'lightMap']) if (o.material[k]) o.material[k].anisotropy = ANISO; });
 // merge static meshes by material: thousands of objects -> a few dozen draw calls
 const byMat = new Map(), collGeoms = [], statics = [];
 house.traverse((o) => { if (o.isMesh && !o.userData.door && !o.userData.dynamic) statics.push(o); });
@@ -399,6 +408,7 @@ function start() {
   overlay.hidden = true;
   playing = true;
   document.body.classList.add('playing');
+  initAudio();
   keepAwake();
   if (TOUCH) {
     $('touch').hidden = false;
@@ -456,6 +466,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyL') toggleLights();
   if (e.code === 'KeyV') toggleView();
   if (e.code === 'KeyQ') togglePost();
+  if (e.code === 'KeyN') sfxOn = !sfxOn;
   if (e.code === 'Space') jump();
   const dm = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);       // 1 = outside, 2 = ground floor, 3 = second floor ...
   if (dm && data.spawns[+dm[1] - 1]) spawn(+dm[1] - 1);
@@ -465,8 +476,9 @@ addEventListener('blur', () => keys.clear());
 addEventListener('wheel', (e) => { if (playing) cam.zoom = THREE.MathUtils.clamp(cam.zoom + e.deltaY * 0.001, 0.6, 1.8); }, { passive: true });
 addEventListener('resize', () => {
   fitFov();
-  renderer.setSize(innerWidth, innerHeight);
-  composer?.setSize(innerWidth, innerHeight);
+  document.body.classList.toggle('rot', ROT());
+  renderer.setSize(VW(), VH());
+  composer?.setSize(VW(), VH());
 });
 function jump() { if (player.onGround) { player.vy = P.jump; player.onGround = false; } }
 function toggleMap() { showMap = !showMap; mapCanvas.style.display = showMap ? '' : 'none'; }
@@ -484,26 +496,28 @@ touchEl.addEventListener('pointerdown', (e) => {
   if (e.target !== touchEl) return;
   e.preventDefault();
   try { touchEl.setPointerCapture(e.pointerId); } catch (err) { /* synthetic or already-ended pointer */ }
-  if (e.clientX < innerWidth * 0.45 && joy.id === null) {
-    joy.id = e.pointerId; joy.x0 = e.clientX; joy.y0 = e.clientY; joy.x = joy.y = 0;
-    Object.assign(joyBase.style, { left: e.clientX + 'px', top: e.clientY + 'px', display: 'block' });
+  const q = local(e);
+  if (q.x < VW() * 0.45 && joy.id === null) {
+    joy.id = e.pointerId; joy.x0 = q.x; joy.y0 = q.y; joy.x = joy.y = 0;
+    Object.assign(joyBase.style, { left: q.x + 'px', top: q.y + 'px', display: 'block' });
     joyKnob.style.transform = '';
     $('joyHint').style.display = 'none';
   } else if (lookT.id === null) {
-    Object.assign(lookT, { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), moved: 0 });
+    Object.assign(lookT, { id: e.pointerId, x: q.x, y: q.y, t: performance.now(), moved: 0 });
   }
 });
 touchEl.addEventListener('pointermove', (e) => {
+  const q = local(e);
   if (e.pointerId === joy.id) {
-    let dx = e.clientX - joy.x0, dy = e.clientY - joy.y0;
+    let dx = q.x - joy.x0, dy = q.y - joy.y0;
     const R = 56, L = Math.hypot(dx, dy);
     if (L > R) { dx *= R / L; dy *= R / L; }
     const m = Math.hypot(dx, dy) / R, c = m < 0.12 ? 0 : Math.pow((m - 0.12) / 0.88, 1.3);
     joy.x = m > 0 ? (dx / R / m) * c : 0; joy.y = m > 0 ? (dy / R / m) * c : 0;
     joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
   } else if (e.pointerId === lookT.id) {
-    const dx = e.clientX - lookT.x, dy = e.clientY - lookT.y;
-    lookT.x = e.clientX; lookT.y = e.clientY; lookT.moved += Math.abs(dx) + Math.abs(dy);
+    const dx = q.x - lookT.x, dy = q.y - lookT.y;
+    lookT.x = q.x; lookT.y = q.y; lookT.moved += Math.abs(dx) + Math.abs(dy);
     lookT.ay -= dx * 0.0058;
     lookT.ap -= dy * 0.0048;
   }
@@ -511,7 +525,7 @@ touchEl.addEventListener('pointermove', (e) => {
 function endTouch(e) {
   if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; joyBase.style.display = 'none'; }
   if (e.pointerId === lookT.id) {
-    if (lookT.moved < 12 && performance.now() - lookT.t < 350) useAt(e.clientX, e.clientY);
+    if (lookT.moved < 12 && performance.now() - lookT.t < 350) { const q = local(e); useAt(q.x, q.y); }
     lookT.id = null;
   }
 }
@@ -526,6 +540,7 @@ press('bLights', toggleLights);
 press('bView', toggleView);
 press('bFloor', cycleFloor);
 press('bMenu', pause);
+press('bSound', () => { sfxOn = !sfxOn; $('bSound').textContent = sfxOn ? 'Sound' : 'Muted'; });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { keys.clear(); resetTouch(); } });
 
 // ------------------------------------------------------------------ doors
@@ -543,7 +558,7 @@ function lookedDoor() {
 function swing(d) { d.target = Math.abs(d.target - d.open) < 1e-3 ? d.closed : d.open; }
 function toggleDoor() { const d = lookedDoor(); if (d) swing(d); }
 function useAt(x, y) {
-  _ndc.set((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
+  _ndc.set((x / VW()) * 2 - 1, -(y / VH()) * 2 + 1);
   raycaster.setFromCamera(_ndc, camera);
   const hit = nearBody(castNearest(raycaster.ray.origin.clone(), raycaster.ray.direction.clone(), camExtra() + REACH + 0.6));
   if (hit?.object.userData.door) swing(hit.object.userData.door);
@@ -699,6 +714,75 @@ function drawMap(lv) {
   c.fillText(data.levels[lv].label.toUpperCase(), pad, 13);
 }
 
+// ------------------------------------------------------------------ footsteps
+let actx = null, noiseBuf = null, master = null, sfxOn = true;
+function initAudio() {
+  if (actx) { actx.resume?.(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    const n = Math.floor(actx.sampleRate * 0.3);
+    noiseBuf = actx.createBuffer(1, n, actx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.5);
+    master = actx.createGain();
+    master.gain.value = 0.55;
+    master.connect(actx.destination);
+  } catch (e) { actx = null; }
+}
+const SURF = {   // filter, centre Hz, Q, level, decay s, heel thump
+  marble: ['bandpass', 3200, 1.4, 0.32, 0.06, 0.5], tile: ['bandpass', 2400, 1.2, 0.34, 0.07, 0.5],
+  wood: ['bandpass', 750, 1.1, 0.5, 0.11, 1.0], grass: ['lowpass', 1400, 0.4, 0.28, 0.16, 0.25],
+  stone: ['bandpass', 1500, 0.9, 0.36, 0.08, 0.7], carpet: ['lowpass', 600, 0.5, 0.25, 0.08, 0.5],
+};
+function surfaceAt() {
+  const r = roomAt(player.pos);
+  const p = toPlan(player.pos);
+  if (r === 'Garden') return p.x > 1.5 && p.x < 17.7 && p.y > -21 && p.y < -4 ? 'stone' : 'grass';
+  if (/Porch/.test(r)) return 'stone';
+  if (/Bath|Washroom|Hamam|Kitchen|Store/.test(r)) return 'tile';
+  if (/Bed|Master|Study|Dressing|Family/.test(r)) return 'wood';
+  if (/Attic/.test(r)) return 'carpet';
+  return 'marble';
+}
+function footstep(loud = 1) {
+  if (!actx || !sfxOn || actx.state !== 'running') return;
+  const [type, freq, q, vol, dec, thump] = SURF[surfaceAt()];
+  const t = actx.currentTime + 0.005;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBuf;
+  src.playbackRate.value = 0.85 + Math.random() * 0.3;
+  const f = actx.createBiquadFilter();
+  f.type = type; f.frequency.value = freq * (0.88 + Math.random() * 0.24); f.Q.value = q;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(vol * loud, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dec * (0.8 + 0.4 * loud));
+  src.connect(f).connect(g).connect(master);
+  src.start(t); src.stop(t + 0.3);
+  const o = actx.createOscillator(), og = actx.createGain();
+  o.frequency.setValueAtTime(95 + Math.random() * 20, t);
+  o.frequency.exponentialRampToValueAtTime(45, t + 0.07);
+  og.gain.setValueAtTime(0.0001, t);
+  og.gain.linearRampToValueAtTime(0.22 * thump * loud, t + 0.005);
+  og.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+  o.connect(og).connect(master);
+  o.start(t); o.stop(t + 0.12);
+}
+let lastPhase = 0, stepDist = 0, wasGround = true;
+function steps(dt) {
+  const speed = Math.hypot(player.vel.x, player.vel.z);
+  const loud = Math.min(1.4, 0.75 + speed / P.run * 0.7);
+  if (player.onGround && !wasGround) footstep(1.3);                     // landing
+  wasGround = player.onGround;
+  if (!player.onGround || speed < 0.35) { stepDist = 0; if (jack) lastPhase = jack.phase; return; }
+  if (jack) {                                                          // in time with Jack's foot plants
+    const ph = jack.phase;
+    const crossed = (a, b, mark) => (a < mark && b >= mark) || (a > b && (mark >= a || mark <= b));
+    if (crossed(lastPhase, ph, 0.02) || crossed(lastPhase, ph, 0.52)) footstep(loud);
+    lastPhase = ph;
+  } else if ((stepDist += speed * dt) > 0.75) { stepDist = 0; footstep(loud); }
+}
+
 // ------------------------------------------------------------------ tutorial (first visit; remembered per browser)
 const tipEl = $('tip');
 const TIPS = TOUCH ? [
@@ -751,7 +835,7 @@ function adaptQuality(dt) {
   if (fps < 45) {
     goodFor = 0;
     if (postOn) postOn = false;                         // drop the effects first, then resolution
-    else if (pixelRatio > 0.75) setPr(Math.max(0.75, pixelRatio - 0.25));
+    else if (pixelRatio > minPr) setPr(Math.max(minPr, pixelRatio - 0.25));
   } else if (fps > 58 && pixelRatio < maxPr && (goodFor += 2) >= 8) { setPr(Math.min(maxPr, pixelRatio + 0.25)); goodFor = 0; }
 }
 renderer.setAnimationLoop(() => {
@@ -762,6 +846,7 @@ renderer.setAnimationLoop(() => {
   if ((lightTimer += dt) > 0.4) { lightTimer = 0; placeLights(); }
   fadeLights(dt);
   tutorial(dt);
+  steps(dt);
   if (postOn && composer) composer.render(); else renderer.render(scene, camera);
 });
 
