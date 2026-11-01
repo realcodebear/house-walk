@@ -1,0 +1,27 @@
+{
+ "K_Idle": {
+  "speed_mps": 0.0,
+  "cycle_s": 6.0,
+  "duration": 6.0
+ },
+ "K_IdleLook": {
+  "duration": 5.966666666666667
+ },
+ "K_Walk": {
+  "speed_mps": 1.3738410088350963,
+  "cycle_s": 1.1666666666666667,
+  "duration": 1.1666666666666667
+ },
+ "K_Jog": {
+  "speed_mps": 2.609070978350404,
+  "cycle_s": 0.7666666666666667,
+  "duration": 0.7666666666666667
+ },
+ "K_Run": {
+  "speed_mps": 4.2538735229755344,
+  "cycle_s": 0.6,
+  "duration": 0.6
+ },
+ "Jump_Air": {},
+ "Jump_Land": {}
+}
