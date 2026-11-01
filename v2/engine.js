@@ -21,7 +21,7 @@ const BASE = (window.HOUSE && window.HOUSE.base) || './';
 const VER = window.HOUSE && window.HOUSE.v ? '?v=' + window.HOUSE.v : '';   // new deploy -> new URLs -> no stale cache
 const params = new URLSearchParams(location.search);
 const TOUCH = matchMedia('(pointer: coarse)').matches || params.has('touch');   // ?touch forces phone controls
-const P = { radius: 0.21, height: 1.68, eye: 1.55, step: 0.3, walk: 1.4, run: 3.8, accel: 11, airAccel: 2.5, jump: 4.0, gravity: 14 };
+const P = { radius: 0.2, height: 1.6, eye: 1.47, step: 0.3, walk: 1.4, run: 3.8, accel: 11, airAccel: 2.5, jump: 4.0, gravity: 14 };
 const SUBSTEPS = 4;
 const REACH = 2.8;
 // phones held upright: the app is turned 90° (CSS) so the game is always landscape
@@ -299,7 +299,7 @@ overlay.hidden = false;
 spawn(0);
 loadJack('../../assets/', VER).then((j) => {
   jack = j;
-  jack.root.scale.setScalar(0.912);                  // 1.67 m (95 % of the earlier 1.76 m)
+  jack.root.scale.setScalar(0.864);                  // 1.58 m: 90 % of the original 0.96 scale
   scene.add(j.root);
   if (!viewChosen) view = 'third';
 }).catch((e) => console.warn('Jack did not load:', e));
