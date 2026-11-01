@@ -6,10 +6,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const smooth = (t) => t * t * (3 - 2 * t);
 
-export async function loadJack(base) {
+export async function loadJack(base, ver = '') {
   const [gltf, meta] = await Promise.all([
-    new GLTFLoader().loadAsync(base + 'jack.glb'),
-    fetch(base + 'jack.json').then((r) => r.json()),
+    new GLTFLoader().loadAsync(base + 'jack.glb' + ver),
+    fetch(base + 'jack.json' + ver).then((r) => r.json()),
   ]);
   return new Jack(gltf, meta);
 }
