@@ -50,7 +50,7 @@ class Jack {
       const want = Math.atan2(vx, vz);
       let d = want - this.heading;
       d = Math.atan2(Math.sin(d), Math.cos(d));
-      this.heading += d * Math.min(1, dt * 10);
+      this.heading += d * Math.min(1, dt * 7);             // gentler turns
     }
     this.root.rotation.y = this.heading;
 

@@ -150,16 +150,16 @@ def dining_library():
 def master_suite():
     level("SF")
     z = F2
-    panel_wall("Master panel", (19.0, 29.6, 14.62, 14.7), z, z + 8.6)
-    bed("Master bed", 21.0, 27.6, 7.75, 14.45, "+y", z)
-    for x0 in (19.3, 27.9):
+    panel_wall("Master panel", (19.6, 30.2, 14.62, 14.7), z, z + 8.6)
+    bed("Master bed", 22.2, 28.4, 8.05, 14.45, "+y", z)        # 3+ ft clear between the door and the bed
+    for x0 in (20.5, 28.75):
         unit("Master side table", "nightstand", x0, x0 + 1.4, 12.9, 14.3, z, "-y", S["wood"], 2.0)
         lamp("Master lamp", x0 + 0.7, 13.6, z + 2.0, h=1.7, r=0.45)
         light(x0 + 0.7, 13.6, z + 3.6, power=0.35)
-    rug("Master rug", 20.0, 28.6, 4.5, 12.6, S["rug_b"], z)
+    rug("Master rug", 21.2, 29.4, 4.8, 12.6, S["rug_b"], z)
     sofa("Master chair", 27.7, 29.8, 1.3, 3.4, "+x", S["chair_fabric"], z, cushions=False, arm=0.45)
     plant("Master plant", 19.3, 1.6, z)
-    _fan("Master fan", 24.3, 8.0, TOP)
+    _fan("Master fan", 25.3, 8.0, TOP)
     # bath + dressing
     finish_room("Master bath tiles", "SF", SF_ROOMS["Master Bath"], z, 4.9, S["bath_wall"])
     vanity("Master vanity", 12.0, 13.3, -2.5, 0.2, z, mirror_side="-x")
@@ -188,11 +188,11 @@ def bedroom3():
     level("SF")
     z = F2
     panel_wall("Bedroom 3 panel", (17.42, 17.5, 29.4, 36.8), z, z + 8.6)
-    bed("Bedroom 3 bed", 11.2, 17.4, 30.6, 35.6, "+x", z)
-    unit("Bedroom 3 side table", "nightstand", 16.0, 17.4, 36.0, 37.4, z, "-x", S["wood"], 2.0)
-    lamp("Bedroom 3 lamp", 16.7, 36.7, z + 2.0, h=1.7, r=0.45)
+    bed("Bedroom 3 bed", 11.8, 17.4, 32.1, 36.7, "+x", z)       # smaller double, clear of the door swing
+    unit("Bedroom 3 side table", "nightstand", 16.1, 17.4, 30.5, 31.8, z, "-x", S["wood"], 2.0)
+    lamp("Bedroom 3 lamp", 16.75, 31.15, z + 2.0, h=1.7, r=0.45)
     wardrobe("Bedroom 3 wardrobe", 13.6, 17.45, 27.45, 29.2, 7.6, S["wardrobe"], z=z, front="+y")
-    rug("Bedroom 3 rug", 10.0, 16.0, 29.8, 36.4, S["rug_b"], z)
+    rug("Bedroom 3 rug", 10.4, 16.0, 31.2, 37.0, S["rug_b"], z)
     _fan("Bedroom 3 fan", 13.0, 32.4, TOP)
 
 

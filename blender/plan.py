@@ -70,7 +70,7 @@ def gf_walls(cfg):
         "GF wall attach W":     ((22.5, 23.2, 21.7, 26.7), [], None),
         "GF wall bed-hamam S":  ((7.8, 30.25, 26.7, 27.4), [D(10.2, 13.1, 'a', (0, 1)), D(18.6, 21.4, 'a', (0, 1)), D(23.5, 26.1, 'a', (0, -1))], None),
         "GF wall hamam-bed":    ((17.5, 18.2, 27.4, 37.5), [], None),
-        "GF wall kitchen-hamam": ((7.8, 8.5, 27.4, 37.5), [A(27.4, 31.9, arch=arch)], None),
+        "GF wall kitchen-hamam": ((7.8, 8.5, 27.4, 37.5), [], None),       # solid: no opening between kitchen and bath
         "GF wall kitchen E":    ((8.6, 9.4, 21.6, 26.7), [D(21.9, 24.7, 'a', (-1, 0))], None),
         "GF wall store-kitchen": ((0.75, 7.8, 32.2, 32.6), [A(5.4, 7.8, arch=False)], None),
     }
