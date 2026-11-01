@@ -1,3 +1,7 @@
 *.blend1
 .DS_Store
 __pycache__/
+# downloaded Poly Haven models: re-fetch with `python3 tools/fetch_models.py`
+blender/assets/ph/*
+!blender/assets/ph/CREDITS.md
+renders/audit/_*.npy

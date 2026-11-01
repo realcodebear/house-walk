@@ -68,6 +68,17 @@ S.update({
               mat("Book cream", (0.85, 0.8, 0.68), 0.7), mat("Book green", (0.15, 0.32, 0.22), 0.7)],
     "fan_body": mat("Fan body", (0.85, 0.83, 0.8), 0.4, 0.3),
     "fan_blade": mat("Fan blade", (1, 1, 1), 0.5, tex="walnut", tile=1.0),
+    "skirting": mat("Walnut skirting", (0.8, 0.75, 0.7), 0.45, tex="walnut", tile=1.0),
+    "models": {
+        "sofa": "Sofa_01", "armchair": ["modern_arm_chair_01", "ArmChair_01"], "coffee": "modern_coffee_table_01",
+        "coffee_round": "modern_coffee_table_02", "side": "side_table_01", "side_unit": "side_table_01",
+        "nightstand": "ClassicNightstand_01", "console": "modern_wooden_cabinet", "tv_unit": "modern_wooden_cabinet",
+        "chair": "painted_wooden_chair_01", "plant": ["potted_plant_02", "potted_plant_01"],
+        "bookshelf": "wooden_bookshelf_worn", "frame": ["hanging_picture_frame_01", "hanging_picture_frame_02"],
+        "pendant": "modern_ceiling_lamp_01", "chandelier": "modern_ceiling_lamp_01",
+        "vase": "ceramic_vase_01", "clock": "wall_clock", "books": "book_encyclopedia_set_01", "tea": "tea_set_01",
+        "aircon": "exterior_aircon_unit",
+    },
 })
 stone = mat("Stone cladding", (1, 1, 1), 0.85, tex="stone", nrm="stone_n", tile=1.6)
 teak = mat("Teak cladding", (1, 1, 1), 0.6, tex="mdf_oak", nrm="mdf_oak_n", tile=1.0)

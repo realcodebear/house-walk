@@ -60,12 +60,12 @@ def bedroom_gf():
     panel_wall("Bed Room panel", (30.17, 30.25, 28.0, 37.0), 0.0, 9.2)
     bed("Bed", 23.8, 30.1, 29.6, 35.6, "+x")
     for (y0, y1) in ((35.9, 37.3), (27.85, 29.25)):
-        box("Side table", 28.7, 30.1, y0, y1, 0, 2.0, S["wood"])
+        unit("Side table", "nightstand", 28.7, 30.1, y0, y1, 0, "-x", S["wood"], 2.0)
         lamp("Bedside lamp", 29.4, (y0 + y1) / 2, 2.0, h=1.7, r=0.45)
         light(29.4, (y0 + y1) / 2, 3.6, power=0.35)
     wardrobe("Wardrobe", 18.2, 20.2, 30.0, 36.6, 7.6, S["wardrobe"], front="+x")
     rug("Bed Room rug", 22.4, 28.6, 28.4, 36.8, S["rug_b"])
-    sofa("Bed Room chair", 20.7, 22.7, 35.3, 37.3, "+y", S["chair_fabric"], cushions=False, arm=0.45)
+    sofa("Bed Room chair", 20.7, 22.7, 34.8, 36.8, "+y", S["chair_fabric"], cushions=False, arm=0.45)
     _fan("Bed Room fan", 25.0, 32.45, H)
 
 
@@ -103,10 +103,10 @@ def drawing_room():
     sofa("Drawing chair 2", 21.6, 23.7, 8.0, 10.2, "-x", S["chair_fabric"], cushions=False, arm=0.45)
     table("Drawing coffee table", 24.4, 26.8, 6.0, 8.8, 1.4, S["table_top"], S["wood_dark"])
     for (y0, y1) in ((2.4, 3.8), (10.8, 12.2)):
-        box("Drawing side table", 28.6, 30.0, y0, y1, 0, 2.0, S["wood"])
+        unit("Drawing side table", "side_unit", 28.6, 30.0, y0, y1, 0, "-x", S["wood"], 2.0)
         lamp("Drawing lamp", 29.3, (y0 + y1) / 2, 2.0, h=1.9, r=0.5)
         light(29.3, (y0 + y1) / 2, 3.8, power=0.35)
-    box("Drawing console", 21.0, 26.0, 13.4, 14.65, 0, 2.6, S["wood"])
+    unit("Drawing console", "console", 21.0, 26.0, 13.4, 14.65, 0, "-y", S["wood"], 2.6)
     frame_art("Drawing art", "x", 14.7, 21.6, 25.4, 4.2, 6.8, "-y", S["art"])
     plant("Drawing plant 1", 29.4, 1.6)
     plant("Drawing plant 2", 19.4, 13.9)
@@ -124,7 +124,7 @@ def family_lounge():
     z = F2
     panel_wall("Family TV panel", (11.52, 11.6, -2.6, 6.0), z, z + H2)
     tv("Family TV", "y", 11.52, -0.2, 4.2, z + 3.1, "-x", S["black"])
-    box("Family TV unit", 10.3, 11.5, -1.6, 5.0, z, z + 1.6, S["wood"])
+    unit("Family TV unit", "tv_unit", 10.3, 11.5, -1.6, 5.0, z, "-x", S["wood"], 1.6)
     rug("Family rug", 4.0, 9.8, -1.4, 5.4, S["rug_a"], z)
     sofa("Family sofa", 2.9, 5.5, -1.6, 5.4, "-x", S["sofa"], z)
     sofa("Family armchair", 6.6, 8.7, -2.6, -0.5, "-y", S["chair_fabric"], z, cushions=False, arm=0.45)
@@ -135,15 +135,16 @@ def family_lounge():
 
 
 def dining_library():
-    """Family dining between the stair well and the bedrooms: a round table for four on the west side,
-    a clear 3-ft route along the east side from the lounge to the bedroom corridor."""
+    """Upstairs sitting nook between the stair well and the bedrooms (no dining table: the family eats on a
+    dastarkhan or in the lounge). Two chairs by the well railing; a clear 3-ft route along the east side."""
     level("SF")
     z = F2
-    cx, cy = 11.5, 15.4
-    table("Family dining table", cx - 1.8, cx + 1.8, cy - 1.8, cy + 1.8, 2.5, S["table_top"], S["wood_dark"], z, round_=True)
-    for i, (dx, dy, f) in enumerate(((0, -2.65, "+y"), (0, 2.65, "-y"), (-2.65, 0, "+x"), (2.65, 0, "-x"))):
-        chair(f"Family dining chair {i}", cx + dx, cy + dy, f, S["wood_dark"], S["seat"], z)
-    pendant("Family pendant", cx, cy, TOP)
+    rug("Nook rug", 8.6, 13.4, 13.0, 18.4, S["rug_b"], z)
+    sofa("Nook chair 1", 8.9, 11.0, 13.4, 15.5, "-x", S["chair_fabric"], z, cushions=False, arm=0.45)
+    sofa("Nook chair 2", 8.9, 11.0, 15.9, 18.0, "-x", S["chair_fabric"], z, cushions=False, arm=0.45)
+    table("Nook table", 11.6, 13.2, 14.9, 16.5, 1.6, S["table_top"], S["wood_dark"], z, round_=True)
+    plant("Nook plant", 13.0, 19.8, z, h=3.2)
+    light(11.0, 15.7, TOP - 0.9, power=0.8)
 
 
 def master_suite():
@@ -152,7 +153,7 @@ def master_suite():
     panel_wall("Master panel", (19.0, 29.6, 14.62, 14.7), z, z + 8.6)
     bed("Master bed", 21.0, 27.6, 7.75, 14.45, "+y", z)
     for x0 in (19.3, 27.9):
-        box("Master side table", x0, x0 + 1.4, 12.9, 14.3, z, z + 2.0, S["wood"])
+        unit("Master side table", "nightstand", x0, x0 + 1.4, 12.9, 14.3, z, "-y", S["wood"], 2.0)
         lamp("Master lamp", x0 + 0.7, 13.6, z + 2.0, h=1.7, r=0.45)
         light(x0 + 0.7, 13.6, z + 3.6, power=0.35)
     rug("Master rug", 20.0, 28.6, 4.5, 12.6, S["rug_b"], z)
@@ -174,7 +175,7 @@ def bedroom2():
     panel_wall("Bedroom 2 panel", (30.17, 30.25, 28.0, 37.0), z, z + 8.6)
     bed("Bedroom 2 bed", 23.8, 30.1, 29.6, 35.6, "+x", z)
     for (y0, y1) in ((35.9, 37.3), (27.85, 29.25)):
-        box("Bedroom 2 side table", 28.7, 30.1, y0, y1, z, z + 2.0, S["wood"])
+        unit("Bedroom 2 side table", "nightstand", 28.7, 30.1, y0, y1, z, "-x", S["wood"], 2.0)
         lamp("Bedroom 2 lamp", 29.4, (y0 + y1) / 2, z + 2.0, h=1.7, r=0.45)
     wardrobe("Bedroom 2 wardrobe", 18.2, 20.2, 30.0, 36.6, 7.6, S["wardrobe"], z=z, front="+x")
     table("Bedroom 2 desk", 20.8, 23.6, 35.6, 37.4, 2.5, S["wood"], S["wood_dark"], z)
@@ -188,7 +189,7 @@ def bedroom3():
     z = F2
     panel_wall("Bedroom 3 panel", (17.42, 17.5, 29.4, 36.8), z, z + 8.6)
     bed("Bedroom 3 bed", 11.2, 17.4, 30.6, 35.6, "+x", z)
-    box("Bedroom 3 side table", 16.0, 17.4, 36.0, 37.4, z, z + 2.0, S["wood"])
+    unit("Bedroom 3 side table", "nightstand", 16.0, 17.4, 36.0, 37.4, z, "-x", S["wood"], 2.0)
     lamp("Bedroom 3 lamp", 16.7, 36.7, z + 2.0, h=1.7, r=0.45)
     wardrobe("Bedroom 3 wardrobe", 13.6, 17.45, 27.45, 29.2, 7.6, S["wardrobe"], z=z, front="+y")
     rug("Bedroom 3 rug", 10.0, 16.0, 29.8, 36.4, S["rug_b"], z)
@@ -201,7 +202,7 @@ def study():
     table("Study desk", 0.8, 3.0, 25.2, 28.8, 2.5, S["wood"], S["wood_dark"], z)
     box("Study monitor", 1.0, 1.15, 26.2, 27.8, z + 2.8, z + 4.0, S["black"])
     chair("Study chair", 3.7, 27.0, "-x", S["wood_dark"], S["seat"], z)
-    bookshelf("Study shelf", 1.0, 7.6, 31.0, 32.15, 7.6, S["wood"], S["books"], z, front="-y")
+    bookshelf("Study shelf", 1.0, 7.6, 30.45, 32.15, 7.6, S["wood"], S["books"], z, front="-y")
     rug("Study rug", 2.4, 7.0, 23.2, 30.4, S["rug_b"], z)
     lamp("Study lamp", 2.4, 25.6, z + 2.5, h=1.5, r=0.35)
 
@@ -225,6 +226,10 @@ def baths_sf():
 
 # ================================================================ lights / decor helpers
 def pendant(name, x, y, ceil, drop=3.0):
+    if has_model("pendant"):
+        model(name, M_("pendant"), x - 1.0, x + 1.0, y - 1.0, y + 1.0, hang=ceil, h=2.6)
+        light(x, y, ceil - 2.8, power=0.8)
+        return
     rod(name + " cord", (x, y, ceil), (x, y, ceil - drop), 0.02, S["black"])
     cyl(name + " shade", x, y, ceil - drop - 0.9, ceil - drop, 0.9, S["pendant"], r2=0.3, seg=24)
     cyl(name + " bulb", x, y, ceil - drop - 0.85, ceil - drop - 0.7, 0.35, S["lampshade"], seg=12)
@@ -232,6 +237,10 @@ def pendant(name, x, y, ceil, drop=3.0):
 
 
 def chandelier(name, x, y, ceil):
+    if has_model("chandelier"):
+        model(name, M_("chandelier"), x - 1.4, x + 1.4, y - 1.4, y + 1.4, hang=ceil, h=2.6)
+        light(x, y, ceil - 2.4, power=1.0)
+        return
     rod(name + " chain", (x, y, ceil), (x, y, ceil - 1.6), 0.03, S["handle"])
     cyl(name + " ring", x, y, ceil - 1.9, ceil - 1.75, 1.3, S["handle"], seg=28)
     for k in range(8):
@@ -240,6 +249,26 @@ def chandelier(name, x, y, ceil):
     light(x, y, ceil - 2.2, power=1.0)
 
 
-def all_common():
-    kitchen(); store(); hamam(); bedroom_gf(); washrooms_gf(); corridor_gf()
-    dining_library(); master_suite(); bedroom2(); bedroom3(); study(); baths_sf()
+def decor():
+    """Small real objects that make rooms feel lived in (each only if the design names a model for it)."""
+    if has_model("vase"):
+        level("GF"); model("Drawing vase", M_("vase"), 21.4, 22.4, 13.6, 14.5, 2.6, "-y", h=1.4)
+    if has_model("clock"):
+        level("GF"); model("Kitchen clock", M_("clock"), 8.45, 8.6, 27.0, 28.4, 6.2, "-x", h=1.05)
+    if has_model("books"):
+        level("SF"); model("Study books", M_("books"), 1.2, 2.8, 28.0, 28.7, F2 + 2.5, "+x", h=0.8)
+    if has_model("tea"):
+        level("SF"); model("Family tea set", M_("tea"), 6.6, 8.2, 1.6, 3.2, F2 + 1.4, "-y", h=0.5)
+    if has_model("aircon"):
+        level("GF"); model("Outdoor AC", M_("aircon"), 31.0, 32.3, 24.0, 30.0, 0.0, "+x", cname="Site")
+        level("SF"); model("Outdoor AC 2", M_("aircon"), 31.0, 32.3, 4.0, 10.0, F2 - 0.6, "+x", cname="Site")
+
+
+def all_common(skip=()):
+    """Every room that looks the same in all designs. skip: names of room functions to leave out."""
+    for fn in (kitchen, store, hamam, bedroom_gf, washrooms_gf, corridor_gf, dining_library, master_suite,
+               bedroom2, bedroom3, study, baths_sf):
+        if fn.__name__ not in skip:
+            fn()
+    if "decor" not in skip:
+        decor()

@@ -162,6 +162,10 @@ def build_structure(cfg):
     for n, r in GF_ROOMS.items():
         floor(n, r, 0.0, fl.get(n, fl["default"]), show=n != "Corridor")
     add_room("Porch", [(1.7, 17.5, -4.5, 6.1)])
+    if STYLE.get("skirting"):
+        for n, r in GF_ROOMS.items():
+            if n not in WET:
+                finish_room(f"GF {n} skirting", "GF", r, 0.0, 0.35, STYLE["skirting"], below=0.35)
     stairs_gf(cfg.get("rail", "glass"))
     # ceilings of the ground floor = underside of the first slab, plus finishes
     for n, r in GF_ROOMS.items():
@@ -179,6 +183,10 @@ def build_structure(cfg):
     for n, r in SF_ROOMS.items():
         floor(n, r, F2, fl.get(n, fl["default"]), show=n not in ("Upper Corridor",))
     floor("Family Lounge", (11.6, 17.5, 6.8, 10.7), F2, fl.get("Family Lounge", fl["default"]))
+    if STYLE.get("skirting"):
+        for n, r in SF_ROOMS.items():
+            if n not in WET:
+                finish_room(f"SF {n} skirting", "SF", r, F2, 0.35, STYLE["skirting"], below=0.35)
     if not cfg.get("attic"):
         railing("Void rail E", [(8.0, 10.7), (8.0, 20.85)], [F2, F2], kind=cfg.get("rail", "glass"))
     railing("Void rail S", [(6.0, 10.7), (8.0, 10.7)], [F2, F2], kind=cfg.get("rail", "glass"))

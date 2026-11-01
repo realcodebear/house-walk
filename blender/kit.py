@@ -4,8 +4,8 @@ Numbers going in are FEET in plan coordinates (x = right on the drawing, y = up 
 meshes come out in metres. Design scripts import this module, call the builders, then `finish(...)`
 which renders previews, exports site/v2/<design>/house.glb + house.json and saves the .blend.
 """
-import bpy, bmesh, math, os, json
-from mathutils import Vector
+import bpy, bmesh, math, os, json, glob, zlib
+from mathutils import Vector, Matrix
 
 FT = 0.3048
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -171,11 +171,26 @@ def mesh_obj(name, verts, faces, m, cname, smooth=False):
     return link(o, cname)
 
 
-def box(name, x0, x1, y0, y1, z0, z1, m, cname="Furniture"):
+def box(name, x0, x1, y0, y1, z0, z1, m, cname="Furniture", soft=None):
+    """soft = edge rounding in ft (furniture gets a small bevel by default so nothing reads as a raw box)."""
     x0, x1 = sorted((x0, x1)); y0, y1 = sorted((y0, y1)); z0, z1 = sorted((z0, z1))
     v = [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0), (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)]
     f = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
-    return mesh_obj(name, v, f, m, cname)
+    o = mesh_obj(name, v, f, m, cname)
+    if soft is None and cname == "Furniture":
+        soft = 0.03
+    if soft:
+        smallest = min(x1 - x0, y1 - y0, z1 - z0)
+        w = min(soft, smallest * 0.45)
+        if w > 0.004:
+            bev = o.modifiers.new("Bevel", 'BEVEL')
+            bev.width = w * FT
+            bev.segments = 4 if soft >= 0.12 else 2
+            bev.limit_method = 'NONE'
+            if soft >= 0.12:
+                for p in o.data.polygons:
+                    p.use_smooth = True
+    return o
 
 
 def prism(name, pts, z0, z1, m, cname="Floors"):
@@ -466,10 +481,11 @@ def door_frame(name, along_x, rect, a, b, zb, head, arch=False, leafless=False):
         span_box(name + " jamb R", along_x, rect, b - f, b, zb, head, 0.0, 1.0, fm)
         span_box(name + " head", along_x, rect, a, b, head - f, head, 0.0, 1.0, fm)
         tw = 0.28
-        for t0, t1 in ((-0.06, 0.0), (1.0, 1.06)):
-            span_box(name + " trim L", along_x, rect, a - tw, a + 0.02, zb, head + tw, t0, t1, fm)
-            span_box(name + " trim R", along_x, rect, b - 0.02, b + tw, zb, head + tw, t0, t1, fm)
-            span_box(name + " trim T", along_x, rect, a - tw, b + tw, head - 0.02, head + tw, t0, t1, fm)
+        for t0, t1, t2 in ((-0.06, 0.0, -0.075), (1.0, 1.06, 1.075)):
+            # side boards stop under the head board; the head board stands slightly proud so no faces coincide
+            span_box(name + " trim L", along_x, rect, a - tw, a + 0.02, zb, head - 0.02, t0, t1, fm)
+            span_box(name + " trim R", along_x, rect, b - 0.02, b + tw, zb, head - 0.02, t0, t1, fm)
+            span_box(name + " trim T", along_x, rect, a - tw - 0.03, b + tw + 0.03, head - 0.02, head + tw, min(t0, t2) if t0 < 0 else t0, max(t1, t2) if t1 > 1 else t1, fm)
     else:
         r = (b - a) / 2
         spring = head - r
@@ -539,7 +555,7 @@ def door_leaf(name, along_x, rect, a, b, zb, hinge, side, open_deg=78, pair=Fals
     hm = STYLE.get("handle", STYLE.get("metal"))
     for sy in (t / 2 + 0.02, -t / 2 - 0.12):
         child(f"{name} plate", w - 0.42, w - 0.3, sy, sy + 0.1, 2.9, 3.7, hm)
-        child(f"{name} lever", w - 0.75, w - 0.3, sy + (0.06 if sy > 0 else -0.06), sy + (0.12 if sy > 0 else 0.0), 3.42, 3.5, hm)
+        child(f"{name} lever", w - 0.75, w - 0.33, sy + (0.07 if sy > 0 else -0.07), sy + (0.13 if sy > 0 else -0.01), 3.42, 3.5, hm)
 
 
 # ================================================================ interior finishes
@@ -749,12 +765,130 @@ def roof_hip(name, x0, x1, y0, y1, z_eave, pitch_deg, m_roof, m_under, thick=0.3
     return zr
 
 
+# ================================================================ real models (Poly Haven, CC0)
+PH_DIR = os.path.join(ROOT, "blender", "assets", "ph")
+_LIB, _DIMS = {}, {}
+
+
+def _asset_mesh(asset, variant=None, max_tris=15000):
+    """Import a Poly Haven glTF once, merge its parts into one mesh (bottom at z=0, footprint centred), decimate."""
+    key = (asset, variant, max_tris)
+    if key in _LIB:
+        return _LIB[key]
+    path = sorted(glob.glob(os.path.join(PH_DIR, asset, "*.gltf")))[0]
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=path)
+    new = [o for o in bpy.data.objects if o not in before]
+    meshes = sorted([o for o in new if o.type == 'MESH'], key=lambda o: o.name)
+    if variant is not None and len(meshes) > 1:
+        meshes = [meshes[variant % len(meshes)]]
+    bm = bmesh.new()
+    mats = []
+    for o in meshes:
+        tmp = o.data.copy()
+        tmp.transform(o.matrix_world)
+        remap = []
+        for m in tmp.materials:
+            if m not in mats:
+                mats.append(m)
+            remap.append(mats.index(m))
+        if remap:
+            for poly in tmp.polygons:
+                poly.material_index = remap[min(poly.material_index, len(remap) - 1)]
+        bm.from_mesh(tmp)
+        bpy.data.meshes.remove(tmp)
+    me = bpy.data.meshes.new(f"LIB {asset} {variant}")
+    bm.to_mesh(me)
+    bm.free()
+    for m in mats:
+        me.materials.append(m)
+    xs = [v.co.x for v in me.vertices]; ys = [v.co.y for v in me.vertices]; zs = [v.co.z for v in me.vertices]
+    me.transform(Matrix.Translation((-(min(xs) + max(xs)) / 2, -(min(ys) + max(ys)) / 2, -min(zs))))
+    tris = sum(len(p.vertices) - 2 for p in me.polygons)
+    if max_tris and tris > max_tris:
+        tmp_o = bpy.data.objects.new("tmp decimate", me)
+        bpy.context.scene.collection.objects.link(tmp_o)
+        mod = tmp_o.modifiers.new("Decimate", 'DECIMATE')
+        mod.ratio = max(0.02, max_tris / tris)
+        dg = bpy.context.evaluated_depsgraph_get()
+        me2 = bpy.data.meshes.new_from_object(tmp_o.evaluated_get(dg))
+        bpy.data.objects.remove(tmp_o, do_unlink=True)
+        bpy.data.meshes.remove(me)
+        me = me2
+        me.name = f"LIB {asset} {variant}"
+        for m in mats:
+            if m.name not in [x.name for x in me.materials]:
+                me.materials.append(m)
+    for o in new:
+        if o.name in bpy.data.objects:
+            bpy.data.objects.remove(o, do_unlink=True)
+    xs = [v.co.x for v in me.vertices]; ys = [v.co.y for v in me.vertices]; zs = [v.co.z for v in me.vertices]
+    _DIMS[me.name] = (max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
+    _LIB[key] = me
+    return me
+
+
+def _pick(choice, name):
+    """A model entry is 'asset', ('asset', variant) or a list of those (picked by name, so it is stable)."""
+    if isinstance(choice, list):
+        choice = choice[zlib.crc32(name.encode()) % len(choice)]
+    return (choice, None) if isinstance(choice, str) else choice
+
+
+def model(name, choice, x0, x1, y0, y1, z=0.0, face="-y", h=None, hang=None, max_tris=15000, cname="Furniture", exact=False):
+    """Place a real model fitted inside the plan rectangle (ft), front facing `face`. Models face -y as authored.
+    h: target height (ft) instead of filling the footprint. hang: ceiling height to hang from (chandeliers)."""
+    asset, variant = _pick(choice, name)
+    me = _asset_mesh(asset, variant, max_tris)
+    mw, md, mh = _DIMS[me.name]
+    if face == "auto":                               # tables: line the model's long side up with the space's
+        face = "-y" if ((mw >= md) == ((x1 - x0) >= (y1 - y0))) else "+x"
+    rot = {"-y": 0.0, "+y": math.pi, "+x": math.pi / 2, "-x": -math.pi / 2}[face]
+    fw, fd = (mw, md) if face in ("-y", "+y") else (md, mw)
+    W, Dp = max(0.05, (x1 - x0) * FT), max(0.05, (y1 - y0) * FT)
+    s_fit = min(W / fw, Dp / fd)
+    if h is not None:
+        s = min(h * FT / mh, s_fit * 1.6)            # height-driven (plants, frames) but never sprawling
+    elif exact:
+        s = s_fit
+    else:
+        s = min(max(s_fit, 0.85), 1.15)              # models are real size: keep them close to it
+    o = bpy.data.objects.new(name, me)
+    o.rotation_euler = (0, 0, rot)
+    o.scale = (s, s, s)
+    zz = (hang * FT - mh * s) if hang is not None else z * FT
+    o.location = ((x0 + x1) / 2 * FT, (y0 + y1) / 2 * FT, zz)
+    o["model"] = asset
+    return link(o, cname)
+
+
+def unit(n, key, x0, x1, y0, y1, z, face, m, h):
+    """A cabinet-like piece: the design's model for `key` if it has one, else a soft box of height h."""
+    if has_model(key):
+        return model(n, M_(key), x0, x1, y0, y1, z, face)
+    return box(n, x0, x1, y0, y1, z, z + h, m)
+
+
+def has_model(key):
+    return bool(STYLE.get("models", {}).get(key))
+
+
+def M_(key):
+    return STYLE["models"][key]
+
+
 # ================================================================ furniture library
 F = "Furniture"
 
 
 def sofa(n, x0, x1, y0, y1, back, m, z=0.0, legs=None, cushions=True, arm=0.55, seat=1.5, top=2.8):
-    """Sofa with base, seat cushions, back cushions and arms. back = side of the backrest."""
+    """Sofa with base, seat cushions, back cushions and arms. back = side of the backrest.
+    With STYLE['models']['sofa' / 'armchair'] a real model is fitted into the same footprint instead."""
+    face = {"-y": "+y", "+y": "-y", "-x": "+x", "+x": "-x"}[back]
+    L = max(x1 - x0, y1 - y0)
+    key = "sofa" if L >= 4.0 else "armchair"
+    if has_model(key):
+        return model(n, M_(key), x0, x1, y0, y1, z, face)
     legs = legs or STYLE.get("wood_dark")
     lh = 0.35
     for (lx, ly) in ((x0 + 0.2, y0 + 0.2), (x1 - 0.2, y0 + 0.2), (x0 + 0.2, y1 - 0.2), (x1 - 0.2, y1 - 0.2)):
@@ -811,29 +945,36 @@ def bed(n, x0, x1, y0, y1, head, z=0.0, linen=None, throw=None, frame=None, head
     box(n + " frame", x0, x1, y0, y1, z + 0.3, z + 1.2, frame, F)
     for (lx, ly) in ((x0 + 0.15, y0 + 0.15), (x1 - 0.15, y0 + 0.15), (x0 + 0.15, y1 - 0.15), (x1 - 0.15, y1 - 0.15)):
         box(n + " leg", lx - 0.12, lx + 0.12, ly - 0.12, ly + 0.12, z, z + 0.3, frame, F)
-    box(n + " mattress", x0 + 0.1, x1 - 0.1, y0 + 0.1, y1 - 0.1, z + 1.2, z + 1.95, linen, F)
+    box(n + " mattress", x0 + 0.1, x1 - 0.1, y0 + 0.1, y1 - 0.1, z + 1.2, z + 1.95, linen, F, soft=0.16)
     tm = throw or STYLE.get("throw", linen)
     if head == "+x":
         box(n + " headboard", x1 - 0.1, x1 + 0.25, y0 - 0.25, y1 + 0.25, z, z + hb_h, headboard, F)
-        box(n + " duvet", x0 + 0.05, x1 - 1.9, y0 + 0.05, y1 - 0.05, z + 1.4, z + 2.12, linen, F)
-        box(n + " throw", x0 + 0.02, x0 + 1.9, y0 + 0.02, y1 - 0.02, z + 1.5, z + 2.16, tm, F)
+        box(n + " duvet", x0 + 0.05, x1 - 1.9, y0 + 0.05, y1 - 0.05, z + 1.4, z + 2.12, linen, F, soft=0.18)
+        box(n + " throw", x0 + 0.02, x0 + 1.9, y0 + 0.02, y1 - 0.02, z + 1.5, z + 2.16, tm, F, soft=0.12)
         for cy in ((y0 + y1) / 2 - 1.3, (y0 + y1) / 2 + 1.3):
-            box(n + " pillow", x1 - 1.6, x1 - 0.35, cy - 1.0, cy + 1.0, z + 1.95, z + 2.55, STYLE.get("pillow", linen), F)
+            box(n + " pillow", x1 - 1.6, x1 - 0.35, cy - 1.0, cy + 1.0, z + 1.95, z + 2.6, STYLE.get("pillow", linen), F, soft=0.24)
     elif head == "-x":
         box(n + " headboard", x0 - 0.25, x0 + 0.1, y0 - 0.25, y1 + 0.25, z, z + hb_h, headboard, F)
-        box(n + " duvet", x0 + 1.9, x1 - 0.05, y0 + 0.05, y1 - 0.05, z + 1.4, z + 2.12, linen, F)
-        box(n + " throw", x1 - 1.9, x1 - 0.02, y0 + 0.02, y1 - 0.02, z + 1.5, z + 2.16, tm, F)
+        box(n + " duvet", x0 + 1.9, x1 - 0.05, y0 + 0.05, y1 - 0.05, z + 1.4, z + 2.12, linen, F, soft=0.18)
+        box(n + " throw", x1 - 1.9, x1 - 0.02, y0 + 0.02, y1 - 0.02, z + 1.5, z + 2.16, tm, F, soft=0.12)
         for cy in ((y0 + y1) / 2 - 1.3, (y0 + y1) / 2 + 1.3):
-            box(n + " pillow", x0 + 0.35, x0 + 1.6, cy - 1.0, cy + 1.0, z + 1.95, z + 2.55, STYLE.get("pillow", linen), F)
+            box(n + " pillow", x0 + 0.35, x0 + 1.6, cy - 1.0, cy + 1.0, z + 1.95, z + 2.6, STYLE.get("pillow", linen), F, soft=0.24)
     elif head == "+y":
         box(n + " headboard", x0 - 0.25, x1 + 0.25, y1 - 0.1, y1 + 0.25, z, z + hb_h, headboard, F)
-        box(n + " duvet", x0 + 0.05, x1 - 0.05, y0 + 0.05, y1 - 1.9, z + 1.4, z + 2.12, linen, F)
-        box(n + " throw", x0 + 0.02, x1 - 0.02, y0 + 0.02, y0 + 1.9, z + 1.5, z + 2.16, tm, F)
+        box(n + " duvet", x0 + 0.05, x1 - 0.05, y0 + 0.05, y1 - 1.9, z + 1.4, z + 2.12, linen, F, soft=0.18)
+        box(n + " throw", x0 + 0.02, x1 - 0.02, y0 + 0.02, y0 + 1.9, z + 1.5, z + 2.16, tm, F, soft=0.12)
         for cx in ((x0 + x1) / 2 - 1.3, (x0 + x1) / 2 + 1.3):
-            box(n + " pillow", cx - 1.0, cx + 1.0, y1 - 1.6, y1 - 0.35, z + 1.95, z + 2.55, STYLE.get("pillow", linen), F)
+            box(n + " pillow", cx - 1.0, cx + 1.0, y1 - 1.6, y1 - 0.35, z + 1.95, z + 2.6, STYLE.get("pillow", linen), F, soft=0.24)
 
 
 def table(n, x0, x1, y0, y1, h, top_m, leg_m=None, z=0.0, thick=0.12, round_=False):
+    w, d = x1 - x0, y1 - y0
+    if h <= 1.8:
+        key = "side" if max(w, d) <= 1.8 else ("coffee_round" if round_ and has_model("coffee_round") else "coffee")
+    else:
+        key = "desk"
+    if has_model(key):
+        return model(n, M_(key), x0, x1, y0, y1, z, "auto")
     leg_m = leg_m or top_m
     if round_:
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
@@ -849,6 +990,8 @@ def table(n, x0, x1, y0, y1, h, top_m, leg_m=None, z=0.0, thick=0.12, round_=Fal
 def chair(n, cx, cy, face, m_wood, m_seat, z=0.0):
     """Dining chair centred at (cx, cy) facing direction `face` ('+x', '-x', '+y', '-y')."""
     s = 0.8
+    if has_model("chair"):
+        return model(n, M_("chair"), cx - s, cx + s, cy - s, cy + s, z, face)
     for (dx, dy) in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
         lx, ly = cx + dx * (s - 0.1), cy + dy * (s - 0.1)
         box(n + " leg", lx - 0.06, lx + 0.06, ly - 0.06, ly + 0.06, z, z + 1.5, m_wood, F)
@@ -886,6 +1029,8 @@ def lamp(n, cx, cy, z, shade_m=None, base_m=None, h=2.0, r=0.55, on=True):
 
 
 def plant(n, x, y, z=0.0, h=3.0, pot_m=None, leaf_m=None):
+    if has_model("plant"):
+        return model(n, M_("plant"), x - 1.1, x + 1.1, y - 1.1, y + 1.1, z, "-y", h=h * 1.15, max_tris=9000)
     pot_m = pot_m or STYLE.get("pot")
     leaf_m = leaf_m or STYLE.get("leaf")
     cyl(n + " pot", x, y, z, z + 1.2, 0.55, pot_m, F, r2=0.45, seg=16)
@@ -899,6 +1044,11 @@ def rug(n, x0, x1, y0, y1, m, z=0.0):
 
 def frame_art(n, along, at, u0, u1, z0, z1, inside, m_art, m_frame=None):
     """Picture on a wall face: along 'x' wall (face at y = at) or 'y' wall (face at x = at)."""
+    if has_model("frame"):
+        s = 1 if inside in ("+y", "+x") else -1
+        if along == "x":
+            return model(n, M_("frame"), u0, u1, min(at, at + s * 0.15), max(at, at + s * 0.15), z0, inside, h=z1 - z0)
+        return model(n, M_("frame"), min(at, at + s * 0.15), max(at, at + s * 0.15), u0, u1, z0, inside, h=z1 - z0)
     m_frame = m_frame or STYLE.get("wood_dark")
     s = 1 if inside in ("+y", "+x") else -1
     if along == "x":
@@ -919,6 +1069,8 @@ def tv(n, along, at, u0, u1, z0, inside, m_black):
 
 
 def bookshelf(n, x0, x1, y0, y1, h, m, books, z=0.0, front="+y"):
+    if has_model("bookshelf"):
+        return model(n, M_("bookshelf"), x0, x1, y0, y1, z, front)
     box(n + " back", x0, x1, y0, y1, z, z + 0.08, m, F)
     rows = int(h / 1.3)
     horiz = front in ("+y", "-y")
@@ -1031,6 +1183,171 @@ def hedge(n, x0, x1, y0, y1, z, h, leaf_m=None):
     box(n, x0, x1, y0, y1, z, z + h, leaf_m or STYLE.get("leaf"), "Site")
 
 
+
+# ================================================================ baked lighting
+BAKE_SKIP = ("glass", "water", "leaves", "lattice", "label", "led", "downlight", "lampshade", "curtain", "lawn",
+             "grass", "street", "asphalt", "solar", "mirror", "screen")
+
+
+def _gpu_on():
+    cp = bpy.context.preferences.addons["cycles"].preferences
+    for dev in ("METAL", "OPTIX", "CUDA", "HIP", "ONEAPI"):
+        try:
+            cp.compute_device_type = dev
+        except TypeError:
+            continue
+        cp.get_devices()
+        devs = [d for d in cp.devices if d.type == dev]
+        if devs:
+            for d in cp.devices:
+                d.use = d.type == dev
+            bpy.context.scene.cycles.device = "GPU"
+            return dev
+    bpy.context.scene.cycles.device = "CPU"
+    return "CPU"
+
+
+def _merge(objs, name):
+    """Merge objects (modifiers applied, world transforms) into one mesh keeping materials and UVMap."""
+    dg = bpy.context.evaluated_depsgraph_get()
+    bm = bmesh.new()
+    mats = []
+    for o in objs:
+        me = bpy.data.meshes.new_from_object(o.evaluated_get(dg))
+        me.transform(o.matrix_world)
+        if not me.uv_layers:
+            me.uv_layers.new(name="UVMap")
+        else:
+            me.uv_layers[0].name = "UVMap"
+        remap = []
+        for m in me.materials:
+            if m not in mats:
+                mats.append(m)
+            remap.append(mats.index(m))
+        if remap:
+            for poly in me.polygons:
+                poly.material_index = remap[min(poly.material_index, len(remap) - 1)]
+        bm.from_mesh(me)
+        bpy.data.meshes.remove(me)
+    out = bpy.data.meshes.new(name)
+    bm.to_mesh(out)
+    bm.free()
+    for m in mats:
+        out.materials.append(m)
+    return out
+
+
+def _blur_masked(a, mask, sigma=1.3):
+    import numpy as np
+    r = int(sigma * 3)
+    k = np.exp(-0.5 * (np.arange(-r, r + 1) / sigma) ** 2)
+    k /= k.sum()
+    def conv(x):
+        for ax in (0, 1):
+            x = np.apply_along_axis(lambda v: np.convolve(v, k, mode="same"), ax, x)
+        return x
+    m = mask.astype(np.float32)
+    num = np.stack([conv(a[..., c] * m) for c in range(3)], -1)
+    den = conv(m)[..., None]
+    out = np.where(den > 1e-4, num / np.maximum(den, 1e-4), a)
+    return np.where(mask[..., None], out, a)
+
+
+def bake_lightmaps(out_dir, res=2048, samples=128, lamp_watts=55.0):
+    """Bake sun + sky + room lamps into one lightmap per floor (+ exterior). Returns {object name: info}."""
+    import numpy as np
+    sc = bpy.context.scene
+    sc.render.engine = "CYCLES"
+    dev = _gpu_on()
+    sc.cycles.samples = samples
+    sc.cycles.use_denoising = False
+    sc.render.bake.margin = 6
+    for i, L in enumerate(LIGHTS):
+        ld = bpy.data.lights.new(f"bake lamp {i}", "POINT")
+        ld.energy = lamp_watts * L["power"]
+        ld.color = L["color"]
+        ld.shadow_soft_size = 0.35
+        lo = bpy.data.objects.new(f"bake lamp {i}", ld)
+        lo.location = (L["x"] * FT, L["y"] * FT, L["z"] * FT)
+        coll("Bake lamps").objects.link(lo)
+    groups = {}
+    for o in list(sc.objects):
+        if o.type != "MESH" or o.get("model") or o.get("door_closed") is not None or o.get("spin") is not None:
+            continue
+        if o.parent is not None:
+            continue
+        cs = [c.name for c in o.users_collection]
+        if any(c in ("Library", "Cameras", "Lights", "Baked") or c.endswith("Labels") for c in cs):
+            continue
+        tag = " ".join(m.name.lower() for m in o.data.materials if m) + " " + o.name.lower()
+        if any(k in tag for k in BAKE_SKIP):
+            continue
+        lv = cs[0].split(" ")[0]
+        groups.setdefault(lv if lv in LEVEL_PARENT else "EXT", []).append(o)
+    info = {}
+    for g, objs in groups.items():
+        me = _merge(objs, f"LM_{g}")
+        lm = bpy.data.objects.new(f"LM_{g}", me)
+        coll("Baked").objects.link(lm)
+        for o in objs:
+            bpy.data.objects.remove(o, do_unlink=True)
+        uv2 = me.uv_layers.new(name="Lightmap")
+        me.uv_layers.active = uv2
+        uv2.active_render = True
+        for o in sc.objects:
+            o.select_set(False)
+        bpy.context.view_layer.objects.active = lm
+        lm.select_set(True)
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.uv.lightmap_pack(PREF_CONTEXT="ALL_FACES", PREF_PACK_IN_ONE=True, PREF_NEW_UVLAYER=False,
+                                 PREF_BOX_DIV=12, PREF_MARGIN_DIV=0.25)
+        bpy.ops.object.mode_set(mode="OBJECT")
+        img = bpy.data.images.new(f"LMIMG_{g}", res, res, float_buffer=True)
+        added = []
+        for m in me.materials:
+            nt = m.node_tree
+            n = nt.nodes.new("ShaderNodeTexImage")
+            n.image = img
+            uvn = nt.nodes.new("ShaderNodeUVMap")
+            uvn.uv_map = "Lightmap"
+            nt.links.new(uvn.outputs["UV"], n.inputs["Vector"])
+            nt.nodes.active = n
+            added.append((nt, n, uvn))
+        bpy.ops.object.bake(type="DIFFUSE", pass_filter={"DIRECT", "INDIRECT"}, margin=6, use_clear=True,
+                            target="IMAGE_TEXTURES", uv_layer="Lightmap")
+        px = np.empty(res * res * 4, dtype=np.float32)
+        img.pixels.foreach_get(px)
+        a = px.reshape(res, res, 4)[..., :3].copy()
+        mask = a.sum(-1) > 1e-6
+        a = _blur_masked(a, mask)
+        lum = a.mean(-1)
+        p = float(np.percentile(lum[mask], 99.5)) if mask.any() else 1.0
+        scale = 0.92 / max(p, 1e-4)
+        enc = np.clip(a * scale, 0, 1) ** (1 / 2.2)
+        rgba = np.concatenate([enc, np.ones((res, res, 1), np.float32)], -1).astype(np.float32).ravel()
+        outimg = bpy.data.images.new(f"LMOUT_{g}", res, res, alpha=False)
+        outimg.colorspace_settings.name = "Non-Color"
+        outimg.pixels.foreach_set(rgba)
+        fname = f"lm_{g}.jpg"
+        outimg.filepath_raw = os.path.join(out_dir, fname)
+        outimg.file_format = "JPEG"
+        sc.render.image_settings.quality = 90
+        outimg.save()
+        for nt, n, uvn in added:
+            nt.nodes.remove(n)
+            nt.nodes.remove(uvn)
+        me.uv_layers["UVMap"].active_render = True
+        me.uv_layers.active = me.uv_layers["UVMap"]
+        lm["lightmap"] = fname
+        info[f"LM_{g}"] = {"file": fname, "scale": 1.0 / scale}
+        print("BAKED", g, dev, len(objs), "objects", f"p99.5={p:.3f}")
+    for o in list(bpy.data.objects):
+        if o.name.startswith("bake lamp"):
+            bpy.data.objects.remove(o, do_unlink=True)
+    return info
+
+
 # ================================================================ export
 def camera(name, loc, target, lens=35, ortho=None):
     cd = bpy.data.cameras.new(name)
@@ -1099,18 +1416,23 @@ def finish(design, data, renders=(), blend_name=None):
         for cam, fname, hide, res in renders:
             render(cam, os.path.join(rdir, f"{design}_{fname}.png"), hide, res)
     sc = bpy.context.scene
+    lightmaps = {}
+    if os.environ.get("BAKE", "0") == "1":
+        lightmaps = bake_lightmaps(out, res=int(os.environ.get("BAKE_RES", "2048")), samples=int(os.environ.get("BAKE_SAMPLES", "128")))
     for o in sc.objects:
         o.select_set(False)
-    skip = {c for c in COLLS if c.endswith("Labels")} | {"Cameras", "Lights"}
+    skip = {c for c in COLLS if c.endswith("Labels")} | {"Cameras", "Lights", "Library"}
     for o in sc.objects:
         if o.type == 'MESH' and not any(c.name in skip for c in o.users_collection):
             o.select_set(True)
     bpy.ops.export_scene.gltf(filepath=os.path.join(out, "house.glb"), export_format='GLB', use_selection=True,
                               export_extras=True, export_apply=True, export_cameras=False, export_lights=False,
-                              export_image_format='AUTO')
+                              export_image_format='AUTO', export_draco_mesh_compression_enable=True,
+                              export_draco_mesh_compression_level=6, export_draco_position_quantization=16,
+                              export_draco_normal_quantization=10, export_draco_texcoord_quantization=14)
     data = dict(data)
     data.update({"ft": FT, "levels": LEVELS, "rooms": ROOMS, "walls": WALL_RECTS, "doors": DOORS, "fans": FANS,
-                 "lights": LIGHTS, "spawns": SPAWNS})
+                 "lights": LIGHTS, "spawns": SPAWNS, "lightmaps": lightmaps})
     with open(os.path.join(out, "house.json"), "w") as fh:
         json.dump(data, fh, indent=1)
     for c in COLLS.values():
