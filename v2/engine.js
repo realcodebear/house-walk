@@ -642,6 +642,7 @@ function update(dt) {
 }
 
 const _tgt = new THREE.Vector3(), _back = new THREE.Vector3(), _want = new THREE.Vector3(), _cd = new THREE.Vector3();
+const camSmooth = new THREE.Vector3();
 function thirdPerson(dt) {
   const cy = Math.cos(player.yaw), sy = Math.sin(player.yaw), cp = Math.cos(player.pitch), spp = Math.sin(player.pitch);
   const indoor = !/Garden|Porch|Terrace/.test(roomAt(player.pos));
@@ -656,7 +657,11 @@ function thirdPerson(dt) {
   const hit = castNearest(_tgt, _cd, len + 0.25);
   const d = hit ? Math.max(0.2, hit.distance - 0.25) : len;
   cam.cur = d < cam.cur ? d : cam.cur + (d - cam.cur) * (1 - Math.exp(-dt * 3));
-  camera.position.copy(_tgt).addScaledVector(_cd, cam.cur);
+  _want.copy(_tgt).addScaledVector(_cd, cam.cur);
+  // ease the camera after him (collision nudges and step-ups don't shake the view); snap if far behind
+  if (camSmooth.distanceToSquared(_want) > 4) camSmooth.copy(_want);
+  camSmooth.lerp(_want, 1 - Math.exp(-dt * 16));
+  camera.position.copy(camSmooth);
   jack.root.visible = cam.cur > 0.55;
 }
 
