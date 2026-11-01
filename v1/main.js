@@ -8,11 +8,11 @@ import { loadJack } from '../assets/jack.js';
 
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-const TOUCH = matchMedia('(pointer: coarse)').matches;
+const TOUCH = matchMedia('(pointer: coarse)').matches || new URLSearchParams(location.search).has('touch');   // ?touch forces phone controls
 const P = { radius: 0.22, height: 1.75, eye: 1.65, step: 0.3, walk: 1.4, run: 3.8, accel: 11, airAccel: 2.5, jump: 4.0, gravity: 14 };
 const SUBSTEPS = 4;
 const REACH = 2.8;                                  // how far a door can be opened from
-const QUALITY = TOUCH ? { pr: 1.5, shadow: 1024, lights: 4 } : { pr: 2, shadow: 2048, lights: 99 };
+const QUALITY = TOUCH ? { pr: 1.5, shadow: 1024, lights: 4 } : { pr: 2, shadow: 2048, lights: 8 };   // lights follow the player
 
 // ------------------------------------------------------------------ renderer / scene
 const $ = (id) => document.getElementById(id);
@@ -199,12 +199,14 @@ function roomAt(pos) {
 }
 
 // nearest hit among the static collider and the door leaves
+const _hits = [];
+function firstHit(obj) { _hits.length = 0; raycaster.intersectObject(obj, false, _hits); return _hits[0] || null; }
 function castNearest(origin, dir, far) {
   raycaster.set(origin, dir);
   raycaster.near = 0; raycaster.far = far;
-  let best = raycaster.intersectObject(collider, false)[0] || null;
+  let best = firstHit(collider);
   for (const m of doorPick) {
-    const h = raycaster.intersectObject(m, false)[0];
+    const h = firstHit(m);
     if (h && (!best || h.distance < best.distance)) best = h;
   }
   return best;
@@ -265,7 +267,7 @@ function floorAt(p) {
   for (const [ox, oz] of FLOOR_PROBES) {
     _o.set(p.x + ox * P.radius * 0.6, p.y + P.step + 0.05, p.z + oz * P.radius * 0.6);
     raycaster.set(_o, DOWN); raycaster.near = 0; raycaster.far = 40;
-    const h = raycaster.intersectObject(collider, false)[0];
+    const h = firstHit(collider);
     if (h && h.point.y > best) best = h.point.y;
   }
   return best;
@@ -276,10 +278,32 @@ let dragLook = false, dragging = false, downAt = null;
 function start() {
   overlay.hidden = true;
   playing = true;
-  if (TOUCH) { $('touch').hidden = false; document.documentElement.requestFullscreen?.().catch(() => {}); }
-  else if (!testMode && !dragLook) canvas.requestPointerLock?.()?.catch?.(() => { dragLook = true; });
+  document.body.classList.add('playing');
+  keepAwake();
+  if (TOUCH) {
+    $('touch').hidden = false;
+    // phones: full screen, then lock to landscape (Android). iPhone cannot lock, so a "turn your phone" card shows in portrait.
+    const el = document.documentElement;
+    if (!testMode && el.requestFullscreen && !document.fullscreenElement) {
+      el.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
+    } else screen.orientation?.lock?.('landscape')?.catch?.(() => {});
+  } else if (!testMode && !dragLook) canvas.requestPointerLock?.()?.catch?.(() => { dragLook = true; });
 }
-function pause() { playing = false; overlay.hidden = false; keys.clear(); resetTouch(); if (document.pointerLockElement) document.exitPointerLock(); }
+function pause() {
+  playing = false; overlay.hidden = false; keys.clear(); resetTouch();
+  document.body.classList.remove('playing');
+  if (document.pointerLockElement) document.exitPointerLock();
+}
+// keep the screen on while playing (Screen Wake Lock: the browser's "caffeinate")
+let wakeLock = null;
+async function keepAwake() {
+  try {
+    if (!('wakeLock' in navigator) || wakeLock) return;
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch (e) { /* not allowed right now (battery saver, hidden tab): try again on the next start */ }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && playing) keepAwake(); });
 overlay.addEventListener('click', () => start());
 document.addEventListener('pointerlockerror', () => { dragLook = true; });
 document.addEventListener('pointerlockchange', () => {
@@ -337,7 +361,7 @@ function cycleFloor() { floorIdx = (floorIdx + 1) % FLOOR_ORDER.length; spawn(FL
 // ------------------------------------------------------------------ input: touch
 const touchEl = $('touch'), joyBase = $('joyBase'), joyKnob = $('joyKnob');
 const joy = { id: null, x0: 0, y0: 0, x: 0, y: 0 };
-const look = { id: null, x: 0, y: 0, t: 0, moved: 0 };
+const look = { id: null, x: 0, y: 0, t: 0, moved: 0, ay: 0, ap: 0 };
 function resetTouch() { joy.id = look.id = null; joy.x = joy.y = 0; joyBase.style.display = 'none'; }
 touchEl.addEventListener('pointerdown', (e) => {
   if (e.target !== touchEl) return;                    // buttons handle their own presses
@@ -357,13 +381,15 @@ touchEl.addEventListener('pointermove', (e) => {
     let dx = e.clientX - joy.x0, dy = e.clientY - joy.y0;
     const R = 56, L = Math.hypot(dx, dy);
     if (L > R) { dx *= R / L; dy *= R / L; }
-    joy.x = dx / R; joy.y = dy / R;
+    // dead zone + gentle curve: small pushes give fine control, a full push walks at full speed
+    const m = Math.hypot(dx, dy) / R, c = m < 0.12 ? 0 : Math.pow((m - 0.12) / 0.88, 1.3);
+    joy.x = m > 0 ? (dx / R / m) * c : 0; joy.y = m > 0 ? (dy / R / m) * c : 0;
     joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
   } else if (e.pointerId === look.id) {
     const dx = e.clientX - look.x, dy = e.clientY - look.y;
     look.x = e.clientX; look.y = e.clientY; look.moved += Math.abs(dx) + Math.abs(dy);
-    player.yaw -= dx * 0.0058;
-    player.pitch = THREE.MathUtils.clamp(player.pitch - dy * 0.0048, -1.3, 1.3);
+    look.ay -= dx * 0.0058;                    // smoothed in update(): touch samples arrive unevenly
+    look.ap -= dy * 0.0048;
   }
 });
 function endTouch(e) {
@@ -423,6 +449,13 @@ function update(dt) {
   }
   if (moving) renderer.shadowMap.needsUpdate = true;
 
+  if (look.ay || look.ap) {                          // ease touch look in over a few frames
+    const a = 1 - Math.exp(-dt * 28), dy = look.ay * a, dp = look.ap * a;
+    player.yaw += dy; look.ay -= dy;
+    player.pitch = THREE.MathUtils.clamp(player.pitch + dp, -1.3, 1.3); look.ap -= dp;
+    if (Math.abs(look.ay) < 1e-5) look.ay = 0;
+    if (Math.abs(look.ap) < 1e-5) look.ap = 0;
+  }
   // wanted horizontal velocity from keys or joystick (analog)
   want.set(0, 0, 0);
   if (playing) {
