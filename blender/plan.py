@@ -24,7 +24,7 @@ FOOT_SF = [(0, 38.25), (31, 38.25), (31, 20.9), (28.5, 20.9), (28.5, 15.5), (31,
 GF_ROOMS = {
     "Store / Laundry": (0.75, 7.8, 32.6, 37.5),
     "Kitchen": (0.75, 8.6, 21.6, 32.2),
-    "Hamam": (8.5, 17.5, 27.4, 37.5),
+    "Hamam": (8.6, 17.5, 27.4, 37.5),
     "Bed Room": (18.2, 30.25, 27.4, 37.5),
     "Attach Washroom": (23.2, 30.25, 21.7, 26.7),
     "Common Washroom": (18.2, 27.9, 15.5, 20.9),
@@ -35,7 +35,7 @@ GF_ROOMS = {
 SF_ROOMS = {
     "Bath 3": (0.75, 7.8, 32.6, 37.5),
     "Study": (0.75, 8.6, 21.6, 32.2),
-    "Bedroom 3": (8.5, 17.5, 27.4, 37.5),
+    "Bedroom 3": (8.6, 17.5, 27.4, 37.5),
     "Bedroom 2": (18.2, 30.25, 27.4, 37.5),
     "Bath 2": (23.2, 30.25, 21.7, 26.7),
     "Common Bath": (18.2, 27.9, 15.5, 20.9),
@@ -206,7 +206,7 @@ def build_structure(cfg):
     for i, cx in enumerate((6.05, 17.06)):
         cfg["column"](f"Porch column {i + 1}", cx, -2.5, -0.5, H)
     SPAWNS[:] = [
-        {"name": "Outside", "x": 11.5, "y": -24.0, "z": GROUND, "yaw": 0.0},
+        {"name": "Garden", "x": 12.4, "y": -16.5, "z": GROUND, "yaw": 0.0},
         {"name": "Ground floor", "x": 13.5, "y": 13.0, "z": 0.05, "yaw": 0.0},
         {"name": "Second floor", "x": 7.0, "y": 4.0, "z": F2 + 0.05, "yaw": -1.2},
     ]

@@ -118,7 +118,7 @@ furnish.family_lounge()
 
 # ---------------------------------------------------------------- facade
 level("GF")
-wall("Clad drawing front", (17.5, 31.0, -0.1, 0.0), [W(20.8, 27.4)], 0.0, H + SLAB, stone, frames=False, cname="Facade")
+wall("Clad drawing front", (17.5, 31.0, -0.1, 0.0), [W(20.8, 27.4)], 0.0, H - 0.1, stone, frames=False, cname="Facade")
 wall("Clad porch wall", (1.7, 17.5, 6.0, 6.1), [W(3.8, 7.7), D2(11.4, 15.4)], 0.0, H, stone, frames=False, cname="Facade")
 level("SF")
 wall("Clad SF front", (1.7, 17.5, -3.6, -3.5), [W(3.2, 10.2, 2.0, 8.0), W(13.6, 16.0, 5.0)], F2, TOP - F2 + SLAB, teak, frames=False, cname="Facade")
@@ -127,8 +127,9 @@ for nm, r in (("L", (19.8, 20.3, -1.4, 0.0, F2 + 1.6, F2 + 8.4)), ("R", (27.9, 2
               ("T", (19.8, 28.4, -1.4, 0.0, F2 + 7.9, F2 + 8.4)), ("B", (19.8, 28.4, -1.4, 0.0, F2 + 1.6, F2 + 2.1))):
     box(f"Window box {nm}", *r, dark_grey, "Facade")
 # band between floors
-box("Floor band front", 1.6, 31.1, -3.7, 0.0, H - 0.1, F2, dark_grey, "Facade")
-for (a, b, c, d) in ((-0.1, 0.0, 20.9, 38.25), (31.0, 31.1, 0.0, 38.25), (0.0, 31.0, 38.25, 38.35), (1.6, 1.7, -3.5, 20.9)):
+box("Floor band front", 1.6, 17.5, -3.72, -3.5, H - 0.1, F2, dark_grey, "Facade")
+box("Floor band drawing", 17.5, 31.12, -0.22, 0.0, H - 0.1, F2, dark_grey, "Facade")
+for (a, b, c, d) in ((-0.12, 0.0, 20.9, 38.37), (31.0, 31.12, 0.0, 38.37), (0.0, 31.0, 38.25, 38.37), (1.58, 1.7, -3.5, 20.9)):
     box("Floor band", a, b, c, d, H - 0.1, F2, dark_grey, "Facade")
 
 # ---------------------------------------------------------------- roof

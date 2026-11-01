@@ -19,6 +19,7 @@ COLLS, MATS, MATINFO = {}, {}, {}
 DOORS, FANS, LIGHTS, ROOMS, SPAWNS = [], [], [], [], []
 LEVELS = {}            # name -> {"z": floor level ft, "h": ceiling height ft, "label": str}
 WALL_RECTS = {}        # level -> [rect, ...] for the minimap
+_BUILT = {}            # (level, base z) -> wall rects already built (to trim overlapping corners)
 STYLE = {}             # filled by the design: materials for frames, doors, glass ...
 
 
@@ -340,6 +341,21 @@ def wall(name, rect, openings=(), zb=0.0, h=10.0, m=None, inside=None, frames=Tr
     lo, hi = (x0, x1) if along_x else (y0, y1)
     if frames:
         WALL_RECTS.setdefault(STATE["level"], []).append([x0, x1, y0, y1])
+        # trim this wall's ends where an earlier wall already fills the corner: overlapping boxes share faces,
+        # and coplanar faces flicker (z-fighting)
+        key = (STATE["level"], round(zb, 3))
+        for (a0, a1, b0, b1) in _BUILT.get(key, []):
+            if along_x and b0 <= y0 + 1e-3 and b1 >= y1 - 1e-3:
+                if a0 <= lo + 1e-3 < a1 < hi:
+                    lo = a1
+                if a0 < hi < a1 + 1e-3 and a0 > lo:
+                    hi = a0
+            if not along_x and a0 <= x0 + 1e-3 and a1 >= x1 - 1e-3:
+                if b0 <= lo + 1e-3 < b1 < hi:
+                    lo = b1
+                if b0 < hi < b1 + 1e-3 and b0 > lo:
+                    hi = b0
+        _BUILT.setdefault(key, []).append((x0, x1, y0, y1))
 
     def piece(tag, a, b, z0, z1):
         if b - a < 1e-3 or z1 - z0 < 1e-3:
